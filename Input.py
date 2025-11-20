@@ -173,7 +173,7 @@ class BESSApp(QWidget):
         root = QVBoxLayout(self); root.setContentsMargins(12,12,12,12); root.setSpacing(10)
 
         # ======= 标题部分 =======
-        title = QLabel("Project Input")
+        title = QLabel("Project Info")
         title.setAlignment(Qt.AlignHCenter)
         title.setStyleSheet(f"color: rgb({THEME_RGB[0]}, {THEME_RGB[1]}, {THEME_RGB[2]}); font-size:20px; font-weight:700;")
         
