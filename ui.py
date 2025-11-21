@@ -38,10 +38,16 @@ st.markdown(f"""
         border: none;
         border-radius: 8px;
         padding: 8px 18px;
-        width: 150px;
+        white-space: nowrap;
     }}
     .stButton>button:hover {{
         background-color: rgba({THEME_RGB[0]}, {THEME_RGB[1]}, {THEME_RGB[2]}, 0.85);
+    }}
+    
+    /* 底部 Next 按钮固定宽度 */
+    div[data-testid="column"]:has(button[key="next_btn"]) .stButton>button {{
+        width: 150px;
+        font-size: 14px;
     }}
     
     /* 使用 Streamlit 容器作为分组框 */
@@ -89,11 +95,17 @@ st.markdown(f"""
         display: none;
     }}
     
-    /* Fetch Temp 按钮自适应 */
-    div[data-testid="column"] .stButton>button {{
-        width: 100%;
-        padding: 6px 12px;
-        font-size: 12px;
+    /* Fetch Temp 按钮样式 */
+    .stButton>button {{
+        font-size: clamp(6px, 0.75vw, 11px);
+        padding: 6px 3px;
+    }}
+    
+    /* 底部 Next 按钮保持原样 */
+    div[data-testid="column"]:has(button[key="next_btn"]) .stButton>button {{
+        width: 150px;
+        font-size: 14px;
+        padding: 8px 18px;
     }}
     
     /* 小屏幕适配 */
@@ -107,6 +119,8 @@ st.markdown(f"""
         }}
         .stButton>button {{
             width: 100%;
+            font-size: 10px !important;
+            padding: 4px 4px !important;
         }}
     }}
     
@@ -160,7 +174,7 @@ with col_left:
         life_stage = st.text_input("Life Stage (BOL/EOL):", value=st.session_state.data['life_stage'], key='life_stage')
         
         # Location with fetch button
-        location_col1, location_col2 = st.columns([2.5, 1])
+        location_col1, location_col2 = st.columns([0.82, 0.18])
         with location_col1:
             location = st.text_input("Location (City or Zipcode):", value=st.session_state.data['location'], key='location')
         with location_col2:
@@ -274,37 +288,36 @@ with col_right:
             index=["", "N/A", "Augmentation", "Overbuild"].index(st.session_state.data['augmentation']) if st.session_state.data['augmentation'] in ["", "N/A", "Augmentation", "Overbuild"] else 0,
             key='augmentation'
         )
-        # 占位符，使两列底部对齐
-        st.markdown('<div style="height: 1px;"></div>', unsafe_allow_html=True)
-
-# Bottom navigation
-st.write("")
-col1, col2, col3 = st.columns([3, 1, 3])
-with col2:
-    if st.button("Next ➔", key='next_btn'):
-        # 保存所有数据到 session_state
-        st.session_state.data.update({
-            'customer': customer,
-            'project': project,
-            'usecase': usecase,
-            'life_stage': life_stage,
-            'location': location,
-            'power': power if power > 0 else None,
-            'power_unit': power_unit,
-            'capacity': capacity if capacity > 0 else None,
-            'capacity_unit': capacity_unit,
-            'power_kw': power_kw,
-            'capacity_kwh': capacity_kwh,
-            'discharge': c_rate_display,
-            'cycle': cycle_num,
-            'product': product,
-            'edge_model': edge_model,
-            'edge_solution': edge_solution,
-            'delivery': delivery,
-            'cod': cod,
-            'augmentation': augmentation
-        })
-        
-        # TODO: 跳转到下一页（PCS选择）
-        st.success("✓ Data saved! (Next page coming soon...)")
-        st.balloons()
+    
+    # Next 按钮在右下角
+    st.write("")
+    st.write("")
+    col_empty, col_btn = st.columns([2, 1])
+    with col_btn:
+        if st.button("Next ➔", key='next_btn', use_container_width=True):
+            # 保存所有数据到 session_state
+            st.session_state.data.update({
+                'customer': customer,
+                'project': project,
+                'usecase': usecase,
+                'life_stage': life_stage,
+                'location': location,
+                'power': power if power > 0 else None,
+                'power_unit': power_unit,
+                'capacity': capacity if capacity > 0 else None,
+                'capacity_unit': capacity_unit,
+                'power_kw': power_kw,
+                'capacity_kwh': capacity_kwh,
+                'discharge': c_rate_display,
+                'cycle': cycle_num,
+                'product': product,
+                'edge_model': edge_model,
+                'edge_solution': edge_solution,
+                'delivery': delivery,
+                'cod': cod,
+                'augmentation': augmentation
+            })
+            
+            # TODO: 跳转到下一页（PCS选择）
+            st.success("✓ Data saved! (Next page coming soon...)")
+            st.balloons()
