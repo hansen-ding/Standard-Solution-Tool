@@ -44,9 +44,10 @@ st.markdown(f"""
         background-color: rgba({THEME_RGB[0]}, {THEME_RGB[1]}, {THEME_RGB[2]}, 0.85);
     }}
     
-    /* 底部 Next 按钮固定宽度 */
+    /* 底部 Next 按钮自适应宽度 */
     div[data-testid="column"]:has(button[key="next_btn"]) .stButton>button {{
-        width: 150px;
+        width: auto;
+        min-width: 100px;
         font-size: 14px;
     }}
     
@@ -95,6 +96,16 @@ st.markdown(f"""
         display: none;
     }}
     
+    /* 隐藏 "Press Enter to apply" 提示 */
+    .stTextInput > div > div > input::placeholder,
+    .stNumberInput > div > div > input::placeholder {{
+        color: transparent;
+    }}
+    .stTextInput [data-testid="InputInstructions"],
+    .stNumberInput [data-testid="InputInstructions"] {{
+        display: none;
+    }}
+    
     /* Fetch Temp 按钮样式 */
     .stButton>button {{
         font-size: clamp(6px, 0.75vw, 11px);
@@ -103,7 +114,8 @@ st.markdown(f"""
     
     /* 底部 Next 按钮保持原样 */
     div[data-testid="column"]:has(button[key="next_btn"]) .stButton>button {{
-        width: 150px;
+        width: auto;
+        min-width: 100px;
         font-size: 14px;
         padding: 8px 18px;
     }}
@@ -158,7 +170,7 @@ if 'data' not in st.session_state:
 
 # 标题
 st.markdown('<div class="main-title">Project Overview</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">Basic Information · Product Selection · System Configuration</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">Basic Information · Product Selection</div>', unsafe_allow_html=True)
 
 # 创建两列布局
 col_left, col_right = st.columns(2)
@@ -242,7 +254,7 @@ with col_right:
             power = st.number_input(
                 "Power:",
                 min_value=0.0,
-                value=float(st.session_state.data['power']) if st.session_state.data['power'] else 0.0,
+                value=float(st.session_state.data['power']) if st.session_state.data['power'] else None,
                 step=1.0,
                 format="%.2f",
                 key='power_input'
@@ -257,7 +269,7 @@ with col_right:
             capacity = st.number_input(
                 "Capacity:",
                 min_value=0.0,
-                value=float(st.session_state.data['capacity']) if st.session_state.data['capacity'] else 0.0,
+                value=float(st.session_state.data['capacity']) if st.session_state.data['capacity'] else None,
                 step=1.0,
                 format="%.2f",
                 key='capacity_input'
@@ -267,8 +279,8 @@ with col_right:
             capacity_unit = st.selectbox("Unit", ["kWh", "MWh"], key='capacity_unit_select', label_visibility="collapsed")
         
         # Calculate and display C-rate
-        power_kw = to_kw(power if power > 0 else None, power_unit)
-        capacity_kwh = to_kwh(capacity if capacity > 0 else None, capacity_unit)
+        power_kw = to_kw(power if power and power > 0 else None, power_unit)
+        capacity_kwh = to_kwh(capacity if capacity and capacity > 0 else None, capacity_unit)
         c_rate = calculate_c_rate(power_kw, capacity_kwh)
         c_rate_display = format_c_rate(c_rate) if c_rate else ""
         
@@ -288,23 +300,36 @@ with col_right:
             index=["", "N/A", "Augmentation", "Overbuild"].index(st.session_state.data['augmentation']) if st.session_state.data['augmentation'] in ["", "N/A", "Augmentation", "Overbuild"] else 0,
             key='augmentation'
         )
-    
-    # Next 按钮在右下角
-    st.write("")
-    st.write("")
-    col_empty, col_btn = st.columns([2, 1])
-    with col_btn:
+
+# ==========================================
+# 👇 Next 按钮：移到页面最底部右下角
+# ==========================================
+
+if 'show_pcs_section' not in st.session_state:
+    st.session_state.show_pcs_section = False
+
+# 只在未显示 PCS 部分时显示 Next 按钮
+if not st.session_state.show_pcs_section:
+    # 添加一点垂直间距，确保不拥挤
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # 创建一个新的底部容器
+    # [10, 1.2] 的比例会让左边留白，把按钮挤到最右边的角落
+    col_footer_left, col_footer_right = st.columns([10, 1.2])
+
+    with col_footer_right:
+        # use_container_width=True 让按钮填满这个小列，视觉上更整齐
         if st.button("Next ➔", key='next_btn', use_container_width=True):
-            # 保存所有数据到 session_state
+            # 保存数据
             st.session_state.data.update({
                 'customer': customer,
                 'project': project,
                 'usecase': usecase,
                 'life_stage': life_stage,
                 'location': location,
-                'power': power if power > 0 else None,
+                'power': power if power and power > 0 else None,
                 'power_unit': power_unit,
-                'capacity': capacity if capacity > 0 else None,
+                'capacity': capacity if capacity and capacity > 0 else None,
                 'capacity_unit': capacity_unit,
                 'power_kw': power_kw,
                 'capacity_kwh': capacity_kwh,
@@ -318,6 +343,46 @@ with col_right:
                 'augmentation': augmentation
             })
             
-            # TODO: 跳转到下一页（PCS选择）
-            st.success("✓ Data saved! (Next page coming soon...)")
-            st.balloons()
+            st.session_state.show_pcs_section = True
+            st.rerun()
+
+# ==========================================
+# PCS Selection 部分
+# ==========================================
+
+if st.session_state.show_pcs_section:
+    st.markdown('<div id="pcs-selection"></div>', unsafe_allow_html=True)
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown('<div class="main-title">System Configuration</div>', unsafe_allow_html=True)
+    st.markdown('<div class="subtitle">PCS Selection · System Configuration</div>', unsafe_allow_html=True)
+    
+    # 创建两列布局显示 PCS 选项
+    pcs_col1, pcs_col2 = st.columns(2)
+    
+    with pcs_col1:
+        with st.container():
+            # 👇 PCS 选项 1 的图片移到标题下方，配置信息上方 (对应红色框位置)
+            st.image(r"C:\Users\h.ding\Desktop\111\Sales Tool\Standard-Solution-Tool\760+DC.png", use_container_width=True)
+            
+            # PCS 信息
+            st.markdown('<div class="group-title">PCS Configuration A</div>', unsafe_allow_html=True)
+            st.markdown("**Model:** PCS-2500")
+            st.markdown("**Number of PCS:** 4 units")
+            st.markdown("**Battery per PCS:** 2 racks")
+            st.markdown("**Total Power:** 10 MW")
+            
+            # TODO: 添加选择按钮
+    
+    with pcs_col2:
+        with st.container():
+            # 👇 PCS 选项 2 的图片移到标题下方，配置信息上方 (对应红色框位置)
+            st.image(r"C:\Users\h.ding\Desktop\111\Sales Tool\Standard-Solution-Tool\760+DC.png", use_container_width=True)
+            
+            # PCS 信息
+            st.markdown('<div class="group-title">PCS Configuration B</div>', unsafe_allow_html=True)
+            st.markdown("**Model:** PCS-3000")
+            st.markdown("**Number of PCS:** 3 units")
+            st.markdown("**Battery per PCS:** 3 racks")
+            st.markdown("**Total Power:** 9 MW")
+            
+            # TODO: 添加选择按钮
