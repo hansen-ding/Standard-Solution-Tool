@@ -240,26 +240,35 @@ with col_left:
             location = st.text_input("Location (City or Zipcode):", value=st.session_state.data['location'], key='location')
         with location_col2:
             st.markdown('<div style="height: 28px;"></div>', unsafe_allow_html=True)
-            if st.button("Fetch Temp", use_container_width=True):
-                if location:
-                    with st.spinner("Fetching temperature data..."):
-                        max_temp, min_temp, tooltip = fetch_temperature(location)
-                        if max_temp is not None:
-                            st.session_state.data['tmax_c'] = max_temp
-                            st.session_state.data['tmin_c'] = min_temp
-                            st.success(f"✓ Temperature fetched!")
-                            st.info(tooltip)
-                        else:
-                            st.error(tooltip)
-                else:
-                    st.warning("Please enter a location first")
+            fetch_clicked = st.button("Fetch Temp", use_container_width=True)
+        
+        # 检测回车键：当 location 改变且不为空时也触发 fetch
+        location_changed = location != st.session_state.data['location']
+        
+        if fetch_clicked or (location_changed and location):
+            if location:
+                with st.spinner("Fetching temperature data..."):
+                    max_temp, min_temp, tooltip = fetch_temperature(location)
+                    if max_temp is not None:
+                        st.session_state.data['tmax_c'] = max_temp
+                        st.session_state.data['tmin_c'] = min_temp
+                        st.session_state.data['location'] = location
+                        st.rerun()
+                    else:
+                        st.error(tooltip)
+            else:
+                st.warning("Please enter a location first")
         
         # Temperature fields (read-only display)
         max_temp_display = st.session_state.data['tmax_c'] if st.session_state.data['tmax_c'] is not None else ""
         min_temp_display = st.session_state.data['tmin_c'] if st.session_state.data['tmin_c'] is not None else ""
         
-        st.text_input("Max Temp (°C):", value=str(max_temp_display), key='max_temp', disabled=True)
-        st.text_input("Min Temp (°C):", value=str(min_temp_display), key='min_temp', disabled=True)
+        # 使用 markdown 显示温度 (模拟 disabled text_input 样式)
+        st.markdown('<p style="margin-bottom: 0.25rem; font-size: 14px; font-weight: 400;">Max Temp (°C):</p>', unsafe_allow_html=True)
+        st.markdown(f'<div style="background-color: #f0f2f6; padding: 0.5rem 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem; font-size: 14px; color: #31333F;">{max_temp_display if max_temp_display else "&nbsp;"}</div>', unsafe_allow_html=True)
+        
+        st.markdown('<p style="margin-bottom: 0.25rem; font-size: 14px; font-weight: 400;">Min Temp (°C):</p>', unsafe_allow_html=True)
+        st.markdown(f'<div style="background-color: #f0f2f6; padding: 0.5rem 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem; font-size: 14px; color: #31333F;">{min_temp_display if min_temp_display else "&nbsp;"}</div>', unsafe_allow_html=True)
     
     # ===== Product =====
     with st.container():
@@ -333,7 +342,9 @@ with col_right:
         c_rate = calculate_c_rate(power_kw, capacity_kwh)
         c_rate_display = format_c_rate(c_rate) if c_rate else ""
         
-        st.text_input("Discharge Rate:", value=c_rate_display, key='discharge', disabled=True)
+        # 使用 markdown 显示 C-rate (模拟 text_input 样式)
+        st.markdown('<p style="margin-bottom: 0.25rem; font-size: 14px; font-weight: 400;">Discharge Rate:</p>', unsafe_allow_html=True)
+        st.markdown(f'<div style="background-color: #f0f2f6; padding: 0.5rem 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem; font-size: 16px; color: #31333F;">{c_rate_display if c_rate_display else "&nbsp;"}</div>', unsafe_allow_html=True)
         
         cycle_num = st.text_input("Cycle Number:", value=st.session_state.data['cycle'], key='cycle')
     
