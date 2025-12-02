@@ -131,3 +131,169 @@ def fetch_temperature(location):
 
     except Exception as e:
         return None, None, f"API error: {str(e)}"
+
+
+def get_pcs_options(product: str, model: str = None, solution_type: str = None, discharge_rate: float = None):
+    """
+    根据产品/型号/方案类型/放电倍率返回 PCS 配置选项数据。
+
+    参数:
+        product: 产品类型（例如 EDGE / grid5015 / Utility / C&I / Residential）
+        model: 型号（示例："760kWh"，或区间 676–507kWh）
+        solution_type: 方案类型（AC / DC）
+        discharge_rate: 放电倍率（C-rate，float）
+
+    返回:
+        List[Dict]: 每项包含以下键：
+            - id
+            - image
+            - title
+            - description
+            - tooltip
+    """
+    base_assets = "images"
+
+    def make_option(opt_id, img, title="配置", desc="推荐搭配", tip="点击查看详情"):
+        return {
+            "id": opt_id,
+            "image": f"{base_assets}/{img}",
+            "title": title,
+            "description": desc,
+            "tooltip": tip,
+        }
+
+    p = (product or "").strip().lower()
+    m = (model or "").strip().lower()
+    st = (solution_type or "").strip().lower()
+
+    # 业务规则：EDGE
+    if p == "edge":
+        # product=EDGE，solution type=DC -> A:760.png, B:760+DC.png
+        if st == "dc":
+            return [
+                make_option("config_a", "760.png", "Config A", "EDGE DC 方案：基础 760"),
+                make_option("config_b", "760+DC.png", "Config B", "EDGE DC 方案：760 + DC"),
+            ]
+        # product=EDGE, model=760kWh, solution type=AC -> A:760+DC+EPC.png, B:760+Dynapower.png
+        if "760" in m and st == "ac":
+            return [
+                make_option("config_a", "760+DC+EPC.png", "Config A", "EDGE AC 方案：760 + DC + EPC"),
+                make_option("config_b", "760+Dynapower.png", "Config B", "EDGE AC 方案：760 + Dynapower"),
+            ]
+        # product=EDGE, model=676到507kWh -> A:760+AC.png, B:760+Dynapower.png
+        # 粗略判断型号字符串是否包含数值并位于 507–676 范围
+        def parse_capacity_kwh(s):
+            import re
+            m = re.findall(r"(\d{3,4})", s)
+            return float(m[0]) if m else None
+        cap = parse_capacity_kwh(m)
+        if cap is not None and 507 <= cap <= 676:
+            return [
+                make_option("config_a", "760+AC.png", "Config A", "EDGE：760 + AC"),
+                make_option("config_b", "760+Dynapower.png", "Config B", "EDGE：760 + Dynapower"),
+            ]
+
+    # 业务规则：grid5015
+    if p == "grid5015":
+        dr = discharge_rate if discharge_rate is not None else None
+        # >0.25C <=0.5C 或 >0.125C <=0.25C -> A:5015+5160.png, B:5015+CAB1000.png
+        if dr is not None and ((dr > 0.25 and dr <= 0.5) or (dr > 0.125 and dr <= 0.25)):
+            return [
+                make_option("config_a", "5015+5160.png", "Config A", "GRID5015：5015 + 5160"),
+                make_option("config_b", "5015+CAB1000.png", "Config B", "GRID5015：5015 + CAB1000"),
+            ]
+        # <=0.125C -> 仅一个配置 5015+4800.png
+        if dr is not None and dr <= 0.125:
+            return [
+                make_option("config_a", "5015+4800.png", "Config", "GRID5015：5015 + 4800"),
+            ]
+
+    # 其他产品沿用原默认 catalog
+    base_assets = "images"
+
+    # 不同产品的推荐文案与图片映射（示例）
+    catalog = {
+        "Utility": [
+            {
+                "id": "pcs_hv",
+                "image": f"{base_assets}/pcs_hv.png",
+                "title": "高压并网 PCS",
+                "description": "适用于大型并网场景，支持高功率密度与并网合规特性。",
+                "tooltip": "推荐用于集中式电站与长时间并网运行。",
+            },
+            {
+                "id": "pcs_mv",
+                "image": f"{base_assets}/pcs_mv.png",
+                "title": "中压并网 PCS",
+                "description": "兼顾成本与性能，适合中大型项目与园区级应用。",
+                "tooltip": "当并网电压等级在中压侧时的优选方案。",
+            },
+        ],
+        "C&I": [
+            {
+                "id": "pcs_ci_ac",
+                "image": f"{base_assets}/pcs_ci_ac.png",
+                "title": "工商业 AC 耦合 PCS",
+                "description": "便于既有工厂/园区改造，部署灵活，维护简便。",
+                "tooltip": "改造存量配电系统的常见选择。",
+            },
+            {
+                "id": "pcs_ci_dc",
+                "image": f"{base_assets}/pcs_ci_dc.png",
+                "title": "工商业 DC 耦合 PCS",
+                "description": "适合与光伏直流侧耦合，提高系统效率与能量利用率。",
+                "tooltip": "新建工商业光储系统的高效配置。",
+            },
+        ],
+        "Residential": [
+            {
+                "id": "pcs_res_hybrid",
+                "image": f"{base_assets}/pcs_res_hybrid.png",
+                "title": "户用混合逆变器",
+                "description": "集成 PV 与储能，提升自发自用与备电能力。",
+                "tooltip": "适用于家庭与小型商铺的一体化方案。",
+            },
+            {
+                "id": "pcs_res_ac",
+                "image": f"{base_assets}/pcs_res_ac.png",
+                "title": "户用 AC 并网逆变器",
+                "description": "配合外置电池或不配储能的并网应用。",
+                "tooltip": "入门级并网配置，安装简便。",
+            },
+        ],
+    }
+
+    # 归一化产品键（允许大小写/中英文别名扩展）
+    key_map = {
+        "utility": "Utility",
+        "uti": "Utility",
+        "ci": "C&I",
+        "c&i": "C&I",
+        "commercial": "C&I",
+        "industrial": "C&I",
+        "res": "Residential",
+        "residential": "Residential",
+    }
+
+    normalized = (product or "").strip().lower()
+    catalog_key = key_map.get(normalized, None)
+    if catalog_key is None:
+        # 未识别产品类型时的通用占位方案
+        return [
+            {
+                "id": "pcs_generic_1",
+                "image": f"{base_assets}/pcs_generic_1.png",
+                "title": "并网型 PCS",
+                "description": "通用并网应用场景，适配多种电压等级。",
+                "tooltip": "默认占位内容，可根据产品类型细化。",
+            },
+            {
+                "id": "pcs_generic_2",
+                "image": f"{base_assets}/pcs_generic_2.png",
+                "title": "独立微网 PCS",
+                "description": "支持孤岛/微网运行，提高系统韧性。",
+                "tooltip": "默认占位内容，可根据产品类型细化。",
+            },
+        ]
+
+    return catalog[catalog_key]

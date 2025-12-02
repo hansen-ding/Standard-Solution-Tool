@@ -3,7 +3,7 @@ Streamlit 销售工具 - 项目信息输入页面
 """
 import streamlit as st
 from algorithm import (
-    to_kw, to_kwh, calculate_c_rate, format_c_rate, fetch_temperature
+    to_kw, to_kwh, calculate_c_rate, format_c_rate, fetch_temperature, get_pcs_options
 )
 from datetime import datetime
 import io
@@ -204,7 +204,8 @@ if 'data' not in st.session_state:
         'delivery': '',
         'cod': '',
         'augmentation': '',
-        'selected_pcs': None
+        'selected_pcs': None,
+        'pcs_options': None,
     }
 
 if 'show_pcs_section' not in st.session_state:
@@ -215,7 +216,7 @@ if 'show_results_section' not in st.session_state:
 
 # 标题
 st.markdown('<div class="main-title">Project Overview</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">Basic Information · Product Selection</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtitle">Basic Information Input</div>', unsafe_allow_html=True)
 
 # 创建居中的容器，左右留白
 spacer_left, center_content, spacer_right = st.columns([0.5, 9, 0.5])
@@ -270,36 +271,12 @@ with col_left:
         st.markdown('<p style="margin-bottom: 0.25rem; font-size: 14px; font-weight: 400;">Min Temp (°C):</p>', unsafe_allow_html=True)
         st.markdown(f'<div style="background-color: #f0f2f6; padding: 0.5rem 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem; font-size: 14px; color: #31333F;">{min_temp_display if min_temp_display else "&nbsp;"}</div>', unsafe_allow_html=True)
     
-    # ===== Product =====
-    with st.container():
-        st.markdown('<div class="group-title">Product</div>', unsafe_allow_html=True)
-        
-        product = st.selectbox(
-            "Product:",
-            ["", "EDGE", "GRID5015", "GRID3421"],
-            index=["", "EDGE", "GRID5015", "GRID3421"].index(st.session_state.data['product']) if st.session_state.data['product'] in ["", "EDGE", "GRID5015", "GRID3421"] else 0,
-            key='product'
-        )
-        
-        # EDGE Model (only show if EDGE is selected)
-        if product == "EDGE":
-            edge_model = st.selectbox(
-                "EDGE Model:",
-                ["", "760kWh", "676kWh", "591kWh", "507kWh", "422kWh", "338kWh"],
-                index=["", "760kWh", "676kWh", "591kWh", "507kWh", "422kWh", "338kWh"].index(st.session_state.data['edge_model']) if st.session_state.data['edge_model'] in ["", "760kWh", "676kWh", "591kWh", "507kWh", "422kWh", "338kWh"] else 0,
-                key='edge_model'
-            )
-        else:
-            edge_model = ""
-            st.session_state.data['edge_model'] = ""
-        
-        # Solution Type (always show)
-        edge_solution = st.selectbox(
-            "Solution Type:",
-            ["", "DC", "AC"],
-            index=["", "DC", "AC"].index(st.session_state.data['edge_solution']) if st.session_state.data['edge_solution'] in ["", "DC", "AC"] else 0,
-            key='edge_solution'
-        )
+    # ===== Product ===== (移除第一页的产品选择控件，改为从 session_state 读取)
+    # 之前此处包含 Product / EDGE Model / Solution Type 的选择框。
+    # 现在不显示，只保留变量以便 Next 时写回。
+    product = st.session_state.data.get('product', '')
+    edge_model = st.session_state.data.get('edge_model', '')
+    edge_solution = st.session_state.data.get('edge_solution', '')
 
 with col_right:
     # ===== System Design =====
@@ -411,93 +388,150 @@ if not st.session_state.show_pcs_section:
 # ==========================================
 
 if st.session_state.show_pcs_section:
+    # 增加与第一页的垂直间距
+    st.markdown("<div style='height: 48px;'></div>", unsafe_allow_html=True)
+    # 顶部主题与副标题
+    st.markdown('<div class="main-title">System Configuration</div>', unsafe_allow_html=True)
+    st.markdown('<div class="subtitle">Product Selection · PCS Selection · System Configuration</div>', unsafe_allow_html=True)
     st.markdown('<div id="pcs-selection"></div>', unsafe_allow_html=True)
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    
-    # 添加导航按钮
-    nav_col1, nav_col2, nav_col3 = st.columns([8, 1.2, 1.2])
-    with nav_col2:
-        if st.button("← Edit Info", key='edit_info_pcs', use_container_width=True):
-            st.session_state.show_pcs_section = False
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # 在 PCS 页提供简洁的产品信息编辑控件
+    edit_col1, edit_col2, edit_col3 = st.columns([3, 3, 3])
+    with edit_col1:
+        product_inline = st.selectbox(
+            "Product",
+            ["", "EDGE", "GRID5015"],
+            index=["", "EDGE", "GRID5015"].index(st.session_state.data.get('product', '')) if st.session_state.data.get('product', '') in ["", "EDGE", "GRID5015"] else 0,
+            key='product_inline'
+        )
+    with edit_col2:
+        if product_inline == "EDGE":
+            model_inline = st.selectbox(
+                "Model",
+                ["", "760kWh", "676kWh", "591kWh", "507kWh", "422kWh", "338kWh"],
+                index=["", "760kWh", "676kWh", "591kWh", "507kWh", "422kWh", "338kWh"].index(st.session_state.data.get('edge_model','')) if st.session_state.data.get('edge_model','') in ["", "760kWh", "676kWh", "591kWh", "507kWh", "422kWh", "338kWh"] else 0,
+                key='model_inline'
+            )
+        else:
+            model_inline = ""
+    with edit_col3:
+        solution_inline = st.selectbox(
+            "Solution",
+            ["", "DC", "AC"],
+            index=["", "DC", "AC"].index(st.session_state.data.get('edge_solution','')) if st.session_state.data.get('edge_solution','') in ["", "DC", "AC"] else 0,
+            key='solution_inline'
+        )
+
+    # 导航与重载（仅保留 Reload Options 按钮）
+    nav_spacer, nav_reload = st.columns([8.5, 1.5])
+    with nav_reload:
+        if st.button("↻ Reload Options", key='reload_options', use_container_width=True):
+            # 更新产品相关选择
+            st.session_state.data['product'] = product_inline
+            st.session_state.data['edge_model'] = model_inline
+            st.session_state.data['edge_solution'] = solution_inline
+            # 从当前输入控件重算 C-rate（无需回到第一页点击 Next）
+            try:
+                cur_power = st.session_state.get('power_input', None)
+                cur_power_unit = st.session_state.get('power_unit_select', 'kW')
+                cur_capacity = st.session_state.get('capacity_input', None)
+                cur_capacity_unit = st.session_state.get('capacity_unit_select', 'kWh')
+                cur_power_kw = to_kw(cur_power if cur_power and cur_power > 0 else None, cur_power_unit)
+                # 修复变量名拼写错误，正确计算容量换算
+                cur_capacity_kwh = to_kwh(cur_capacity if cur_capacity and cur_capacity > 0 else None, cur_capacity_unit)
+                cur_c_rate = calculate_c_rate(cur_power_kw, cur_capacity_kwh)
+                st.session_state.data['power_kw'] = cur_power_kw
+                st.session_state.data['capacity_kwh'] = cur_capacity_kwh
+                st.session_state.data['discharge'] = format_c_rate(cur_c_rate) if cur_c_rate else ""
+            except Exception:
+                pass
+            # 清空选中并刷新
+            st.session_state.data['selected_pcs'] = None
             st.session_state.show_results_section = False
             st.rerun()
-    with nav_col3:
-        if st.session_state.data.get('selected_pcs') and st.session_state.show_results_section:
-            if st.button("↻ Re-select PCS", key='reselect_pcs', use_container_width=True):
-                st.session_state.data['selected_pcs'] = None
-                st.session_state.show_results_section = False
-                st.rerun()
-    
-    st.markdown('<div class="main-title">System Configuration</div>', unsafe_allow_html=True)
-    st.markdown('<div class="subtitle">PCS Selection · System Configuration</div>', unsafe_allow_html=True)
-    
-    # 如果已经选择了PCS，只显示选中的配置
-    if st.session_state.data.get('selected_pcs'):
-        # 创建居中的容器
+
+    # 准备选项数据（按当前输入生成)，空白状态处理
+    current_product = st.session_state.data.get('product')
+    current_model = st.session_state.data.get('edge_model')
+    current_solution = st.session_state.data.get('edge_solution')
+    # 使用最新保存的功率/容量
+    current_power_kw = st.session_state.data.get('power_kw')
+    current_capacity_kwh = st.session_state.data.get('capacity_kwh')
+    current_c_rate = calculate_c_rate(current_power_kw, current_capacity_kwh)
+
+    if not current_product and not current_solution:
+        pcs_options = []
+    else:
+        pcs_options = get_pcs_options(
+            product=current_product,
+            model=current_model,
+            solution_type=current_solution,
+            discharge_rate=current_c_rate,
+        ) or []
+    st.session_state.data['pcs_options'] = pcs_options
+
+    # 安全渲染图片函数：当文件不存在或路径为空时不渲染
+    import os
+    def render_image_safe(path: str):
+        if not path:
+            return
+        try:
+            if path.startswith('http://') or path.startswith('https://'):
+                st.image(path, use_container_width=True)
+            else:
+                if os.path.isfile(path):
+                    st.image(path, use_container_width=True)
+        except Exception:
+            pass
+
+    # 已选择时仅显示选中配置；空白或无数据时保持空白
+    if st.session_state.data.get('selected_pcs') and pcs_options:
         pcs_spacer_left, pcs_center, pcs_spacer_right = st.columns([2, 6, 2])
-        
         with pcs_center:
             with st.container():
-                if st.session_state.data['selected_pcs'] == 'Configuration A':
-                    st.image("images/760+DC.png", use_container_width=True)
-                    st.markdown('<div class="group-title">PCS Configuration A (Selected)</div>', unsafe_allow_html=True)
-                    st.markdown("**Model:** PCS-2500")
-                    st.markdown("**Number of PCS:** 4 units")
-                    st.markdown("**Battery per PCS:** 2 racks")
-                    st.markdown("**Total Power:** 10 MW")
-                else:
-                    st.image("images/760+AC.png", use_container_width=True)
-                    st.markdown('<div class="group-title">PCS Configuration B (Selected)</div>', unsafe_allow_html=True)
-                    st.markdown("**Model:** PCS-3000")
-                    st.markdown("**Number of PCS:** 3 units")
-                    st.markdown("**Battery per PCS:** 3 racks")
-                    st.markdown("**Total Power:** 9 MW")
-    else:
+                selected_label = st.session_state.data['selected_pcs']
+                idx = 0 if selected_label == 'Configuration A' else 1
+                opt = pcs_options[idx] if len(pcs_options) > idx else None
+                if opt:
+                    render_image_safe(opt.get("image"))
+                    st.markdown(f'<div class="group-title">{selected_label} (Selected)</div>', unsafe_allow_html=True)
+                    st.markdown(f"**Title:** {opt.get('title','')}")
+                    st.markdown(f"**Description:** {opt.get('description','')}")
+    elif pcs_options:
         # 未选择时显示两个选项
-        # 创建居中的容器，左右留白
         pcs_spacer_left, pcs_center, pcs_spacer_right = st.columns([1, 8, 1])
-        
         with pcs_center:
-            # 创建两列布局显示 PCS 选项，中间留一点空白
             pcs_col1, pcs_gap, pcs_col2 = st.columns([3.75, 0.5, 3.75])
-            
             with pcs_col1:
                 with st.container():
-                    # 👇 PCS 选项 1 的图片移到标题下方，配置信息上方 (对应红色框位置)
-                    st.image("images/760+DC.png", use_container_width=True)
-                    
-                    # PCS 信息
-                    st.markdown('<div class="group-title">PCS Configuration A</div>', unsafe_allow_html=True)
-                    st.markdown("**Model:** PCS-2500")
-                    st.markdown("**Number of PCS:** 4 units")
-                    st.markdown("**Battery per PCS:** 2 racks")
-                    st.markdown("**Total Power:** 10 MW")
-                    
-                    # 选择按钮
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    if st.button("Select Configuration A", key='select_pcs_a', use_container_width=True):
-                        st.session_state.data['selected_pcs'] = 'Configuration A'
-                        st.session_state.show_results_section = True
-                        st.rerun()
-            
+                    a_opt = pcs_options[0] if len(pcs_options) > 0 else None
+                    if a_opt:
+                        render_image_safe(a_opt.get("image"))
+                        st.markdown('<div class="group-title">PCS Configuration A</div>', unsafe_allow_html=True)
+                        st.markdown(f"**Title:** {a_opt.get('title','')}")
+                        st.markdown(f"**Description:** {a_opt.get('description','')}")
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        if st.button("Select Configuration A", key='select_pcs_a', use_container_width=True):
+                            st.session_state.data['selected_pcs'] = 'Configuration A'
+                            st.session_state.show_results_section = True
+                            st.rerun()
             with pcs_col2:
                 with st.container():
-                    # 👇 PCS 选项 2 的图片移到标题下方，配置信息上方 (对应红色框位置)
-                    st.image("images/760+AC.png", use_container_width=True)
-                    
-                    # PCS 信息
-                    st.markdown('<div class="group-title">PCS Configuration B</div>', unsafe_allow_html=True)
-                    st.markdown("**Model:** PCS-3000")
-                    st.markdown("**Number of PCS:** 3 units")
-                    st.markdown("**Battery per PCS:** 3 racks")
-                    st.markdown("**Total Power:** 9 MW")
-                    
-                    # 选择按钮
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    if st.button("Select Configuration B", key='select_pcs_b', use_container_width=True):
-                        st.session_state.data['selected_pcs'] = 'Configuration B'
-                        st.session_state.show_results_section = True
-                        st.rerun()
+                    b_opt = pcs_options[1] if len(pcs_options) > 1 else None
+                    if b_opt:
+                        render_image_safe(b_opt.get("image"))
+                        st.markdown('<div class="group-title">PCS Configuration B</div>', unsafe_allow_html=True)
+                        st.markdown(f"**Title:** {b_opt.get('title','')}")
+                        st.markdown(f"**Description:** {b_opt.get('description','')}")
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        if st.button("Select Configuration B", key='select_pcs_b', use_container_width=True):
+                            st.session_state.data['selected_pcs'] = 'Configuration B'
+                            st.session_state.show_results_section = True
+                            st.rerun()
+    else:
+        # 完全空白状态：不渲染任何图片或错误
+        st.markdown("<br>", unsafe_allow_html=True)
 
 # ==========================================
 # Results & Analysis 部分

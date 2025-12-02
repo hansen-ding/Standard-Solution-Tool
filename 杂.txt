@@ -1,0 +1,9 @@
+If
+EDGE + anything + DC = 760 / 760+DC
+EDGE + 760 + AC = 760+DC+EPC / 760+Dyna
+EDGE + 676-507 + AC = 760+AC / 760+Dyna
+EDGE + 422-338 + AC = No recommendation
+else
+5015 + 0.5C~0.25C = sineng5160 / cab1000*4
+5015 + 0.25C~0.125C = sineng5160 / cab1000*4
+5015 + 0.125C = sineng4800
