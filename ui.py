@@ -426,7 +426,7 @@ if st.session_state.show_pcs_section:
     # 导航与重载（仅保留 Reload Options 按钮）
     nav_spacer, nav_reload = st.columns([8.5, 1.5])
     with nav_reload:
-        if st.button("↻ Reload Options", key='reload_options', use_container_width=True):
+        if st.button("↻ Load Options", key='reload_options', use_container_width=True):
             # 更新产品相关选择
             st.session_state.data['product'] = product_inline
             st.session_state.data['edge_model'] = model_inline
@@ -438,7 +438,7 @@ if st.session_state.show_pcs_section:
                 cur_capacity = st.session_state.get('capacity_input', None)
                 cur_capacity_unit = st.session_state.get('capacity_unit_select', 'kWh')
                 cur_power_kw = to_kw(cur_power if cur_power and cur_power > 0 else None, cur_power_unit)
-                # 修复变量名拼写错误，正确计算容量换算
+                # Use correct variable names
                 cur_capacity_kwh = to_kwh(cur_capacity if cur_capacity and cur_capacity > 0 else None, cur_capacity_unit)
                 cur_c_rate = calculate_c_rate(cur_power_kw, cur_capacity_kwh)
                 st.session_state.data['power_kw'] = cur_power_kw
@@ -460,7 +460,15 @@ if st.session_state.show_pcs_section:
     current_capacity_kwh = st.session_state.data.get('capacity_kwh')
     current_c_rate = calculate_c_rate(current_power_kw, current_capacity_kwh)
 
+    # 特定组合不推荐：EDGE 422/338kWh；GRID5015 的 DC
+    no_recommend = (
+        (current_product == 'EDGE' and current_model in ['422kWh', '338kWh']) or
+        (current_product == 'GRID5015' and current_solution == 'DC')
+    )
+
     if not current_product and not current_solution:
+        pcs_options = []
+    elif no_recommend:
         pcs_options = []
     else:
         pcs_options = get_pcs_options(
@@ -485,8 +493,10 @@ if st.session_state.show_pcs_section:
         except Exception:
             pass
 
-    # 已选择时仅显示选中配置；空白或无数据时保持空白
-    if st.session_state.data.get('selected_pcs') and pcs_options:
+    # 已选择时仅显示选中配置；空白或无数据时保持空白或提示
+    if no_recommend:
+        st.info("No recommended solution")
+    elif st.session_state.data.get('selected_pcs') and pcs_options:
         pcs_spacer_left, pcs_center, pcs_spacer_right = st.columns([2, 6, 2])
         with pcs_center:
             with st.container():
@@ -508,7 +518,7 @@ if st.session_state.show_pcs_section:
                     a_opt = pcs_options[0] if len(pcs_options) > 0 else None
                     if a_opt:
                         render_image_safe(a_opt.get("image"))
-                        st.markdown('<div class="group-title">PCS Configuration A</div>', unsafe_allow_html=True)
+                        st.markdown('<div class="group-title">Configuration A</div>', unsafe_allow_html=True)
                         st.markdown(f"**Title:** {a_opt.get('title','')}")
                         st.markdown(f"**Description:** {a_opt.get('description','')}")
                         st.markdown("<br>", unsafe_allow_html=True)
@@ -521,7 +531,7 @@ if st.session_state.show_pcs_section:
                     b_opt = pcs_options[1] if len(pcs_options) > 1 else None
                     if b_opt:
                         render_image_safe(b_opt.get("image"))
-                        st.markdown('<div class="group-title">PCS Configuration B</div>', unsafe_allow_html=True)
+                        st.markdown('<div class="group-title">Configuration B</div>', unsafe_allow_html=True)
                         st.markdown(f"**Title:** {b_opt.get('title','')}")
                         st.markdown(f"**Description:** {b_opt.get('description','')}")
                         st.markdown("<br>", unsafe_allow_html=True)
