@@ -402,6 +402,21 @@ if not st.session_state.show_pcs_section:
 if st.session_state.show_pcs_section:
     st.markdown('<div id="pcs-selection"></div>', unsafe_allow_html=True)
     st.markdown("<br><br>", unsafe_allow_html=True)
+    
+    # 添加导航按钮
+    nav_col1, nav_col2, nav_col3 = st.columns([8, 1.2, 1.2])
+    with nav_col2:
+        if st.button("← Edit Info", key='edit_info_pcs', use_container_width=True):
+            st.session_state.show_pcs_section = False
+            st.session_state.show_results_section = False
+            st.rerun()
+    with nav_col3:
+        if st.session_state.data.get('selected_pcs') and st.session_state.show_results_section:
+            if st.button("↻ Re-select PCS", key='reselect_pcs', use_container_width=True):
+                st.session_state.data['selected_pcs'] = None
+                st.session_state.show_results_section = False
+                st.rerun()
+    
     st.markdown('<div class="main-title">System Configuration</div>', unsafe_allow_html=True)
     st.markdown('<div class="subtitle">PCS Selection · System Configuration</div>', unsafe_allow_html=True)
     
@@ -413,14 +428,14 @@ if st.session_state.show_pcs_section:
         with pcs_center:
             with st.container():
                 if st.session_state.data['selected_pcs'] == 'Configuration A':
-                    st.image("760+DC.png", use_container_width=True)
+                    st.image("images/760+DC.png", use_container_width=True)
                     st.markdown('<div class="group-title">PCS Configuration A (Selected)</div>', unsafe_allow_html=True)
                     st.markdown("**Model:** PCS-2500")
                     st.markdown("**Number of PCS:** 4 units")
                     st.markdown("**Battery per PCS:** 2 racks")
                     st.markdown("**Total Power:** 10 MW")
                 else:
-                    st.image("760+AC.png", use_container_width=True)
+                    st.image("images/760+AC.png", use_container_width=True)
                     st.markdown('<div class="group-title">PCS Configuration B (Selected)</div>', unsafe_allow_html=True)
                     st.markdown("**Model:** PCS-3000")
                     st.markdown("**Number of PCS:** 3 units")
@@ -438,7 +453,7 @@ if st.session_state.show_pcs_section:
             with pcs_col1:
                 with st.container():
                     # 👇 PCS 选项 1 的图片移到标题下方，配置信息上方 (对应红色框位置)
-                    st.image("760+DC.png", use_container_width=True)
+                    st.image("images/760+DC.png", use_container_width=True)
                     
                     # PCS 信息
                     st.markdown('<div class="group-title">PCS Configuration A</div>', unsafe_allow_html=True)
@@ -457,7 +472,7 @@ if st.session_state.show_pcs_section:
             with pcs_col2:
                 with st.container():
                     # 👇 PCS 选项 2 的图片移到标题下方，配置信息上方 (对应红色框位置)
-                    st.image("760+AC.png", use_container_width=True)
+                    st.image("images/760+AC.png", use_container_width=True)
                     
                     # PCS 信息
                     st.markdown('<div class="group-title">PCS Configuration B</div>', unsafe_allow_html=True)
@@ -480,6 +495,20 @@ if st.session_state.show_pcs_section:
 if st.session_state.show_results_section:
     st.markdown('<div id="results-section"></div>', unsafe_allow_html=True)
     st.markdown("<br><br>", unsafe_allow_html=True)
+    
+    # 添加导航按钮
+    nav_col1, nav_col2, nav_col3 = st.columns([7.6, 1.2, 1.2])
+    with nav_col2:
+        if st.button("← Edit Info", key='edit_info_results', use_container_width=True):
+            st.session_state.show_pcs_section = False
+            st.session_state.show_results_section = False
+            st.rerun()
+    with nav_col3:
+        if st.button("↻ Change PCS", key='change_pcs', use_container_width=True):
+            st.session_state.data['selected_pcs'] = None
+            st.session_state.show_results_section = False
+            st.rerun()
+    
     st.markdown('<div class="main-title">Results & Analysis</div>', unsafe_allow_html=True)
     st.markdown('<div class="subtitle">Capacity Analysis · Performance Metrics</div>', unsafe_allow_html=True)
     
