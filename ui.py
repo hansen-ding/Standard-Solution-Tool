@@ -5,6 +5,10 @@ import streamlit as st
 from algorithm import (
     to_kw, to_kwh, calculate_c_rate, format_c_rate, fetch_temperature
 )
+from datetime import datetime
+import io
+from PIL import Image
+import base64
 
 # 主题颜色
 THEME_RGB = (234, 85, 32)
@@ -49,6 +53,14 @@ st.markdown(f"""
         width: auto;
         min-width: 100px;
         font-size: 14px;
+    }}
+    
+    /* Export Configuration 按钮自适应宽度 */
+    div[data-testid="column"]:has(button[key="export_config_btn"]) .stButton>button {{
+        width: auto;
+        min-width: 150px;
+        font-size: 14px;
+        padding: 8px 18px;
     }}
     
     /* 使用 Streamlit 容器作为分组框 */
@@ -142,6 +154,32 @@ st.markdown(f"""
             max-width: 1600px;
         }}
     }}
+    
+    /* PCS 图片固定高度 */
+    .stImage img {{
+        height: 300px;
+        object-fit: contain;
+    }}
+    
+    /* Results 表格样式 - 更小的字体和紧凑布局 */
+    .stDataFrame {{
+        font-size: 10px;
+    }}
+    .stDataFrame table {{
+        font-size: 10px;
+    }}
+    .stDataFrame th {{
+        font-size: 10px;
+        padding: 2px 4px !important;
+        white-space: nowrap;
+    }}
+    .stDataFrame td {{
+        font-size: 10px;
+        padding: 2px 4px !important;
+    }}
+    .stDataFrame [data-testid="stDataFrame"] {{
+        height: auto !important;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -165,15 +203,26 @@ if 'data' not in st.session_state:
         'edge_solution': '',
         'delivery': '',
         'cod': '',
-        'augmentation': ''
+        'augmentation': '',
+        'selected_pcs': None
     }
+
+if 'show_pcs_section' not in st.session_state:
+    st.session_state.show_pcs_section = False
+
+if 'show_results_section' not in st.session_state:
+    st.session_state.show_results_section = False
 
 # 标题
 st.markdown('<div class="main-title">Project Overview</div>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">Basic Information · Product Selection</div>', unsafe_allow_html=True)
 
-# 创建两列布局
-col_left, col_right = st.columns(2)
+# 创建居中的容器，左右留白
+spacer_left, center_content, spacer_right = st.columns([0.5, 9, 0.5])
+
+with center_content:
+    # 创建两列布局
+    col_left, col_right = st.columns(2)
 
 with col_left:
     # ===== Basic Info =====
@@ -305,46 +354,46 @@ with col_right:
 # 👇 Next 按钮：移到页面最底部右下角
 # ==========================================
 
-if 'show_pcs_section' not in st.session_state:
-    st.session_state.show_pcs_section = False
-
 # 只在未显示 PCS 部分时显示 Next 按钮
 if not st.session_state.show_pcs_section:
     # 添加一点垂直间距，确保不拥挤
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # 创建一个新的底部容器
-    # [10, 1.2] 的比例会让左边留白，把按钮挤到最右边的角落
-    col_footer_left, col_footer_right = st.columns([10, 1.2])
+    # 创建一个新的底部容器 - 也使用 0.5:9:0.5 布局保持一致
+    next_spacer_left, next_center, next_spacer_right = st.columns([0.5, 9, 0.5])
+    
+    with next_center:
+        # [10, 1.2] 的比例会让左边留白，把按钮挤到最右边的角落
+        col_footer_left, col_footer_right = st.columns([10, 1.2])
 
-    with col_footer_right:
-        # use_container_width=True 让按钮填满这个小列，视觉上更整齐
-        if st.button("Next ➔", key='next_btn', use_container_width=True):
-            # 保存数据
-            st.session_state.data.update({
-                'customer': customer,
-                'project': project,
-                'usecase': usecase,
-                'life_stage': life_stage,
-                'location': location,
-                'power': power if power and power > 0 else None,
-                'power_unit': power_unit,
-                'capacity': capacity if capacity and capacity > 0 else None,
-                'capacity_unit': capacity_unit,
-                'power_kw': power_kw,
-                'capacity_kwh': capacity_kwh,
-                'discharge': c_rate_display,
-                'cycle': cycle_num,
-                'product': product,
-                'edge_model': edge_model,
-                'edge_solution': edge_solution,
-                'delivery': delivery,
-                'cod': cod,
-                'augmentation': augmentation
-            })
-            
-            st.session_state.show_pcs_section = True
-            st.rerun()
+        with col_footer_right:
+            # use_container_width=True 让按钮填满这个小列，视觉上更整齐
+            if st.button("Next ➔", key='next_btn', use_container_width=True):
+                # 保存数据
+                st.session_state.data.update({
+                    'customer': customer,
+                    'project': project,
+                    'usecase': usecase,
+                    'life_stage': life_stage,
+                    'location': location,
+                    'power': power if power and power > 0 else None,
+                    'power_unit': power_unit,
+                    'capacity': capacity if capacity and capacity > 0 else None,
+                    'capacity_unit': capacity_unit,
+                    'power_kw': power_kw,
+                    'capacity_kwh': capacity_kwh,
+                    'discharge': c_rate_display,
+                    'cycle': cycle_num,
+                    'product': product,
+                    'edge_model': edge_model,
+                    'edge_solution': edge_solution,
+                    'delivery': delivery,
+                    'cod': cod,
+                    'augmentation': augmentation
+                })
+                
+                st.session_state.show_pcs_section = True
+                st.rerun()
 
 # ==========================================
 # PCS Selection 部分
@@ -356,33 +405,133 @@ if st.session_state.show_pcs_section:
     st.markdown('<div class="main-title">System Configuration</div>', unsafe_allow_html=True)
     st.markdown('<div class="subtitle">PCS Selection · System Configuration</div>', unsafe_allow_html=True)
     
-    # 创建两列布局显示 PCS 选项
-    pcs_col1, pcs_col2 = st.columns(2)
+    # 如果已经选择了PCS，只显示选中的配置
+    if st.session_state.data.get('selected_pcs'):
+        # 创建居中的容器
+        pcs_spacer_left, pcs_center, pcs_spacer_right = st.columns([2, 6, 2])
+        
+        with pcs_center:
+            with st.container():
+                if st.session_state.data['selected_pcs'] == 'Configuration A':
+                    st.image("760+DC.png", use_container_width=True)
+                    st.markdown('<div class="group-title">PCS Configuration A (Selected)</div>', unsafe_allow_html=True)
+                    st.markdown("**Model:** PCS-2500")
+                    st.markdown("**Number of PCS:** 4 units")
+                    st.markdown("**Battery per PCS:** 2 racks")
+                    st.markdown("**Total Power:** 10 MW")
+                else:
+                    st.image("760+AC.png", use_container_width=True)
+                    st.markdown('<div class="group-title">PCS Configuration B (Selected)</div>', unsafe_allow_html=True)
+                    st.markdown("**Model:** PCS-3000")
+                    st.markdown("**Number of PCS:** 3 units")
+                    st.markdown("**Battery per PCS:** 3 racks")
+                    st.markdown("**Total Power:** 9 MW")
+    else:
+        # 未选择时显示两个选项
+        # 创建居中的容器，左右留白
+        pcs_spacer_left, pcs_center, pcs_spacer_right = st.columns([1, 8, 1])
+        
+        with pcs_center:
+            # 创建两列布局显示 PCS 选项，中间留一点空白
+            pcs_col1, pcs_gap, pcs_col2 = st.columns([3.75, 0.5, 3.75])
+            
+            with pcs_col1:
+                with st.container():
+                    # 👇 PCS 选项 1 的图片移到标题下方，配置信息上方 (对应红色框位置)
+                    st.image("760+DC.png", use_container_width=True)
+                    
+                    # PCS 信息
+                    st.markdown('<div class="group-title">PCS Configuration A</div>', unsafe_allow_html=True)
+                    st.markdown("**Model:** PCS-2500")
+                    st.markdown("**Number of PCS:** 4 units")
+                    st.markdown("**Battery per PCS:** 2 racks")
+                    st.markdown("**Total Power:** 10 MW")
+                    
+                    # 选择按钮
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("Select Configuration A", key='select_pcs_a', use_container_width=True):
+                        st.session_state.data['selected_pcs'] = 'Configuration A'
+                        st.session_state.show_results_section = True
+                        st.rerun()
+            
+            with pcs_col2:
+                with st.container():
+                    # 👇 PCS 选项 2 的图片移到标题下方，配置信息上方 (对应红色框位置)
+                    st.image("760+AC.png", use_container_width=True)
+                    
+                    # PCS 信息
+                    st.markdown('<div class="group-title">PCS Configuration B</div>', unsafe_allow_html=True)
+                    st.markdown("**Model:** PCS-3000")
+                    st.markdown("**Number of PCS:** 3 units")
+                    st.markdown("**Battery per PCS:** 3 racks")
+                    st.markdown("**Total Power:** 9 MW")
+                    
+                    # 选择按钮
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("Select Configuration B", key='select_pcs_b', use_container_width=True):
+                        st.session_state.data['selected_pcs'] = 'Configuration B'
+                        st.session_state.show_results_section = True
+                        st.rerun()
+
+# ==========================================
+# Results & Analysis 部分
+# ==========================================
+
+if st.session_state.show_results_section:
+    st.markdown('<div id="results-section"></div>', unsafe_allow_html=True)
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown('<div class="main-title">Results & Analysis</div>', unsafe_allow_html=True)
+    st.markdown('<div class="subtitle">Capacity Analysis · Performance Metrics</div>', unsafe_allow_html=True)
     
-    with pcs_col1:
-        with st.container():
-            # 👇 PCS 选项 1 的图片移到标题下方，配置信息上方 (对应红色框位置)
-            st.image(r"C:\Users\h.ding\Desktop\111\Sales Tool\Standard-Solution-Tool\760+DC.png", use_container_width=True)
-            
-            # PCS 信息
-            st.markdown('<div class="group-title">PCS Configuration A</div>', unsafe_allow_html=True)
-            st.markdown("**Model:** PCS-2500")
-            st.markdown("**Number of PCS:** 4 units")
-            st.markdown("**Battery per PCS:** 2 racks")
-            st.markdown("**Total Power:** 10 MW")
-            
-            # TODO: 添加选择按钮
+    st.markdown("<br>", unsafe_allow_html=True)
     
-    with pcs_col2:
-        with st.container():
-            # 👇 PCS 选项 2 的图片移到标题下方，配置信息上方 (对应红色框位置)
-            st.image(r"C:\Users\h.ding\Desktop\111\Sales Tool\Standard-Solution-Tool\760+DC.png", use_container_width=True)
-            
-            # PCS 信息
-            st.markdown('<div class="group-title">PCS Configuration B</div>', unsafe_allow_html=True)
-            st.markdown("**Model:** PCS-3000")
-            st.markdown("**Number of PCS:** 3 units")
-            st.markdown("**Battery per PCS:** 3 racks")
-            st.markdown("**Total Power:** 9 MW")
-            
-            # TODO: 添加选择按钮
+    # 创建表格数据
+    import pandas as pd
+    
+    # 表格列名（9列）
+    columns = ["End of Year", "Containers in Service", "PCS in Service", "SOH (% of Original Capacity)", 
+               "DC Nameplate", "DC Usable", "AC Usable @ MVT", "Min. Required", "Δ"]
+    
+    # 创建示例数据（20行：1-20）
+    data = []
+    for year in range(1, 21):
+        data.append({
+            "End of Year": year,
+            "Containers in Service": "",
+            "PCS in Service": "",
+            "SOH (% of Original Capacity)": "",
+            "DC Nameplate": "",
+            "DC Usable": "",
+            "AC Usable @ MVT": "",
+            "Min. Required": "",
+            "Δ": ""
+        })
+    
+    df = pd.DataFrame(data)
+    
+    # 显示表格 - 精确调整高度，刚好显示20行数据
+    st.markdown('<div class="group-title">Capacity Analysis Table</div>', unsafe_allow_html=True)
+    st.dataframe(df, use_container_width=True, hide_index=True, height=738)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # 绘图区域
+    st.markdown('<div class="group-title">Performance Chart</div>', unsafe_allow_html=True)
+    
+    # 示例：使用 Streamlit 的 line_chart
+    import numpy as np
+    chart_data = pd.DataFrame(
+        np.random.randn(20, 3),
+        columns=['DC Usable', 'AC Usable', 'Min. Required']
+    )
+    st.line_chart(chart_data)
+    
+    # 添加 Export Configuration 按钮到右下角
+    st.markdown("<br>", unsafe_allow_html=True)
+    export_col_left, export_col_right = st.columns([8.5, 1.5])
+    
+    with export_col_right:
+        if st.button("Export Configuration", key='export_config_btn', use_container_width=True):
+            # TODO: 添加导出配置的逻辑
+            st.success("✓ Ready to export!")
+            st.info("Export functionality will be implemented here.")
