@@ -3,6 +3,15 @@
 """
 import requests
 from datetime import date
+import os
+import pandas as pd
+from math import ceil
+
+# Data folder paths
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+BESS_XLSX = os.path.join(DATA_DIR, "BESS.xlsx")
+DEGRADATION_XLSX = os.path.join(DATA_DIR, "Degradation.xlsx")
 
 
 def to_kw(value, unit):
@@ -135,166 +144,281 @@ def fetch_temperature(location):
 
 def get_pcs_options(product: str, model: str = None, solution_type: str = None, discharge_rate: float = None):
     """
-    根据产品/型号/方案类型/放电倍率返回 PCS 配置选项数据。
-
-    参数:
-        product: 产品类型（例如 EDGE / grid5015 / Utility / C&I / Residential）
-        model: 型号（示例："760kWh"，或区间 676–507kWh）
-        solution_type: 方案类型（AC / DC）
-        discharge_rate: 放电倍率（C-rate，float）
-
-    返回:
-        List[Dict]: 每项包含以下键：
-            - id
-            - image
-            - title
-            - description
-            - tooltip
+    Return PCS configuration options for EDGE and GRID5015 only.
+    Each option includes: id, image, components, architecture, origin.
     """
     base_assets = "images"
 
-    def make_option(opt_id, img, title="配置", desc="推荐搭配", tip="点击查看详情", components: str = ""):
+    def make_option(opt_id, img, components: str = "", architecture: str = "", origin: str = ""):
         return {
             "id": opt_id,
             "image": f"{base_assets}/{img}",
-            "title": title,
-            "description": desc,
-            "tooltip": tip,
             "components": components,
+            "architecture": architecture,
+            "origin": origin,
         }
 
     p = (product or "").strip().lower()
     m = (model or "").strip().lower()
-    st = (solution_type or "").strip().lower()
+    stype = (solution_type or "").strip().lower()
 
-    # 业务规则：EDGE
+    # EDGE rules
     if p == "edge":
-        # product=EDGE，solution type=DC -> A:760.png, B:760+DC.png
-        if st == "dc":
+        if stype == "dc":
             return [
-                make_option("config_a", "760.png", "Config A", "EDGE DC 方案：基础 760", components="Gotion EDGE BESS"),
-                make_option("config_b", "760+DC.png", "Config B", "EDGE DC 方案：760 + DC", components="Gotion EDGE BESS + Gotion DC Confluence Cabinet"),
+                make_option(
+                    "config_a",
+                    "760.png",
+                    "Gotion EDGE BESS",
+                    architecture="-",
+                    origin="China",
+                ),
+                make_option(
+                    "config_b",
+                    "760+DC.png",
+                    "Gotion EDGE BESS + Gotion DC Confluence Cabinet",
+                    architecture="Centralized System",
+                    origin="China",
+                ),
             ]
-        # product=EDGE, model=760kWh, solution type=AC -> A:760+DC+EPC.png, B:760+Dynapower.png
-        if "760" in m and st == "ac":
+        if "760" in m and stype == "ac":
             return [
-                make_option("config_a", "760+DC+EPC.png", "Config A", "EDGE AC 方案：760 + DC + EPC", components="Gotion EDGE BESS + Gotion DC Confluence Cabinet + EPC Power CAB1000/AC-3L.2"),
-                make_option("config_b", "760+Dynapower.png", "Config B", "EDGE AC 方案：760 + Dynapower", components="Gotion EDGE BESS + Dynapower MPS-125"),
+                make_option(
+                    "config_a",
+                    "760+DC+EPC.png",
+                    "Gotion EDGE BESS + Gotion DC Confluence Cabinet + EPC Power CAB1000/AC-3L.2",
+                    architecture="Centralized System",
+                    origin="BESS: China, PCS: USA",
+                ),
+                make_option(
+                    "config_b",
+                    "760+Dynapower.png",
+                    "Gotion EDGE BESS + Dynapower MPS-125",
+                    architecture="String System",
+                    origin="BESS: China, PCS: USA",
+                ),
             ]
-        # product=EDGE, model=676到507kWh -> A:760+AC.png, B:760+Dynapower.png
-        # 粗略判断型号字符串是否包含数值并位于 507–676 范围
-        def parse_capacity_kwh(s):
-            import re
-            m = re.findall(r"(\d{3,4})", s)
-            return float(m[0]) if m else None
-        cap = parse_capacity_kwh(m)
+        # parse capacity range 507–676
+        import re
+        nums = re.findall(r"(\d{3,4})", m)
+        cap = float(nums[0]) if nums else None
         if cap is not None and 507 <= cap <= 676:
             return [
-                make_option("config_a", "760+AC.png", "Config A", "EDGE：760 + AC", components="Gotion EDGE BESS + Gotion AC Confluence Cabinet"),
-                make_option("config_b", "760+Dynapower.png", "Config B", "EDGE：760 + Dynapower", components="Gotion EDGE BESS + Dynapower MPS-125"),
+                make_option(
+                    "config_a",
+                    "760+AC.png",
+                    "Gotion EDGE BESS + Gotion AC Confluence Cabinet",
+                    architecture="Centralized System",
+                    origin="BESS: China, PCS: China",
+                ),
+                make_option(
+                    "config_b",
+                    "760+Dynapower.png",
+                    "Gotion EDGE BESS + Dynapower MPS-125",
+                    architecture="String System",
+                    origin="BESS: China, PCS: USA",
+                ),
             ]
+        return []
 
-    # 业务规则：grid5015
+    # GRID5015 rules
     if p == "grid5015":
         dr = discharge_rate if discharge_rate is not None else None
-        # >0.25C <=0.5C 或 >0.125C <=0.25C -> A:5015+5160.png, B:5015+CAB1000.png
         if dr is not None and ((dr > 0.25 and dr <= 0.5) or (dr > 0.125 and dr <= 0.25)):
             return [
-                make_option("config_a", "5015+5160.png", "Config A", "GRID5015：5015 + 5160", components="Gotion GRID5015 + Sineng EH-5160-HA-MR-US-34.5 Skid"),
-                make_option("config_b", "5015+CAB1000.png", "Config B", "GRID5015：5015 + CAB1000", components="Gotion GRID5015 + EPC Power CAB1000/AC-3L.2 Skid"),
+                make_option(
+                    "config_a",
+                    "5015+5160.png",
+                    "Gotion GRID5015 + Sineng EH-5160-HA-MR-US-34.5 Skid",
+                    architecture="Centralized System",
+                    origin="BESS: China, PCS skid: China",
+                ),
+                make_option(
+                    "config_b",
+                    "5015+CAB1000.png",
+                    "Gotion GRID5015 + EPC Power CAB1000/AC-3L.2 Skid",
+                    architecture="Centralized System",
+                    origin="BESS: China, PCS skid: USA",
+                ),
             ]
-        # <=0.125C -> 仅一个配置 5015+4800.png
         if dr is not None and dr <= 0.125:
             return [
-                make_option("config_a", "5015+4800.png", "Config", "GRID5015：5015 + 4800", components="Gotion GRID5015 + EH-4800-HA-MR-US-34.5"),
+                make_option(
+                    "config_a",
+                    "5015+4800.png",
+                    "Gotion GRID5015 + EH-4800-HA-MR-US-34.5",
+                    architecture="Centralized System",
+                    origin="BESS: China, PCS skid: USA",
+                ),
             ]
+        return []
 
-    # 其他产品沿用原默认 catalog
-    base_assets = "images"
+    # Default: no options
+    return []
 
-    # 不同产品的推荐文案与图片映射（示例）
-    catalog = {
-        "Utility": [
-            {
-                "id": "pcs_hv",
-                "image": f"{base_assets}/pcs_hv.png",
-                "title": "高压并网 PCS",
-                "description": "适用于大型并网场景，支持高功率密度与并网合规特性。",
-                "tooltip": "推荐用于集中式电站与长时间并网运行。",
-            },
-            {
-                "id": "pcs_mv",
-                "image": f"{base_assets}/pcs_mv.png",
-                "title": "中压并网 PCS",
-                "description": "兼顾成本与性能，适合中大型项目与园区级应用。",
-                "tooltip": "当并网电压等级在中压侧时的优选方案。",
-            },
-        ],
-        "C&I": [
-            {
-                "id": "pcs_ci_ac",
-                "image": f"{base_assets}/pcs_ci_ac.png",
-                "title": "工商业 AC 耦合 PCS",
-                "description": "便于既有工厂/园区改造，部署灵活，维护简便。",
-                "tooltip": "改造存量配电系统的常见选择。",
-            },
-            {
-                "id": "pcs_ci_dc",
-                "image": f"{base_assets}/pcs_ci_dc.png",
-                "title": "工商业 DC 耦合 PCS",
-                "description": "适合与光伏直流侧耦合，提高系统效率与能量利用率。",
-                "tooltip": "新建工商业光储系统的高效配置。",
-            },
-        ],
-        "Residential": [
-            {
-                "id": "pcs_res_hybrid",
-                "image": f"{base_assets}/pcs_res_hybrid.png",
-                "title": "户用混合逆变器",
-                "description": "集成 PV 与储能，提升自发自用与备电能力。",
-                "tooltip": "适用于家庭与小型商铺的一体化方案。",
-            },
-            {
-                "id": "pcs_res_ac",
-                "image": f"{base_assets}/pcs_res_ac.png",
-                "title": "户用 AC 并网逆变器",
-                "description": "配合外置电池或不配储能的并网应用。",
-                "tooltip": "入门级并网配置，安装简便。",
-            },
-        ],
-    }
 
-    # 归一化产品键（允许大小写/中英文别名扩展）
-    key_map = {
-        "utility": "Utility",
-        "uti": "Utility",
-        "ci": "C&I",
-        "c&i": "C&I",
-        "commercial": "C&I",
-        "industrial": "C&I",
-        "res": "Residential",
-        "residential": "Residential",
-    }
+def load_bess_specs(xlsx_path: str = BESS_XLSX, sheet: int | str = 0) -> pd.DataFrame:
+    """Load BESS specs workbook. Returns a DataFrame of the requested sheet."""
+    if not os.path.exists(xlsx_path):
+        raise FileNotFoundError(f"BESS.xlsx not found: {xlsx_path}")
+    return pd.read_excel(xlsx_path, sheet_name=sheet)
 
-    normalized = (product or "").strip().lower()
-    catalog_key = key_map.get(normalized, None)
-    if catalog_key is None:
-        # 未识别产品类型时的通用占位方案
-        return [
-            {
-                "id": "pcs_generic_1",
-                "image": f"{base_assets}/pcs_generic_1.png",
-                "title": "并网型 PCS",
-                "description": "通用并网应用场景，适配多种电压等级。",
-                "tooltip": "默认占位内容，可根据产品类型细化。",
-            },
-            {
-                "id": "pcs_generic_2",
-                "image": f"{base_assets}/pcs_generic_2.png",
-                "title": "独立微网 PCS",
-                "description": "支持孤岛/微网运行，提高系统韧性。",
-                "tooltip": "默认占位内容，可根据产品类型细化。",
-            },
-        ]
 
-    return catalog[catalog_key]
+def load_degradation_table(xlsx_path: str = DEGRADATION_XLSX, sheet: int | str = 0) -> pd.DataFrame:
+    """Load Degradation workbook. Returns a DataFrame of the requested sheet."""
+    if not os.path.exists(xlsx_path):
+        raise FileNotFoundError(f"Degradation.xlsx not found: {xlsx_path}")
+    return pd.read_excel(xlsx_path, sheet_name=sheet)
+
+
+def _norm(s: str) -> str:
+    return (str(s or "").replace(" ", "").replace("\u00a0", "").upper())
+
+EDGE_MODEL_TO_HEADER = {
+    "760kWh": "ESD1267-05P760-G",
+    "676kWh": "ESD1126-05P676-G",
+    "591kWh": "ESD985-05P591-G",
+    "507kWh": "ESD844-05P507-G",
+    "422kWh": "ESD704-05P422-G",
+    "338kWh": "ESD563-05P338-G",
+}
+GRID5015_HEADER = "ESD1331-05P5015"
+
+def get_bess_specs_for(product: str, model: str | None, xlsx_path: str = BESS_XLSX, sheet: int | str = 0) -> dict:
+    """Load BESS.xlsx and return a dict of specs for the selected product/model column.
+    Uses first column as keys and the matched header column as values.
+    """
+    df = load_bess_specs(xlsx_path, sheet)
+    if df.shape[1] < 2:
+        raise ValueError("BESS.xlsx: not enough columns")
+    # Determine target header
+    prodN = _norm(product)
+    target_header = None
+    if prodN == "EDGE":
+        header = EDGE_MODEL_TO_HEADER.get((model or "").strip())
+        target_header = header
+    elif prodN == "GRID5015":
+        target_header = GRID5015_HEADER
+    else:
+        raise ValueError(f"Unsupported product: {product}")
+    if not target_header:
+        raise ValueError(f"Missing or unsupported model for EDGE: {model}")
+    # Find column index by normalized header match
+    norm_cols = [_norm(str(c)) for c in df.columns]
+    try:
+        col_idx = norm_cols.index(_norm(target_header))
+    except ValueError:
+        raise KeyError(f"Column not found in BESS.xlsx: {target_header}")
+    # Build dict from first column keys to target column values
+    keys = df.iloc[:, 0]
+    vals = df.iloc[:, col_idx]
+    out: dict = {}
+    for k, v in zip(keys, vals):
+        key = None if pd.isna(k) else str(k).strip()
+        val = None if pd.isna(v) else v
+        if key:
+            out[key] = val
+    return out
+
+
+def compute_proposed_bess_count(
+    capacity_required_kwh: float,
+    product: str,
+    model: str | None,
+    augmentation_mode: str,
+    bess_specs_sheet: int | str = 0,
+) -> int:
+    """
+    Compute proposed number of BESS containers.
+
+    Rules:
+    - If augmentation_mode in ['N/A', 'Augmentation'] -> direct sizing by single product capacity.
+    - If augmentation_mode == 'Overbuild' -> placeholder branch (to be implemented upon your rule).
+
+    Inputs:
+    - capacity_required_kwh: target capacity (kWh) to meet.
+    - product/model: used to fetch single product capacity from data/BESS.xlsx.
+    - augmentation_mode: "", "N/A", "Augmentation", or "Overbuild".
+
+    Returns integer count (ceil), minimum 0.
+    """
+    try:
+        specs = get_bess_specs_for(product, model, sheet=bess_specs_sheet)
+        # Attempt to locate single product energy capacity from specs.
+        # Prefer keys commonly named like '100% DOD Energy (kWh)'; otherwise try a few variants.
+        energy_kwh = None
+        for key in (
+            '100% DOD Energy (kWh)',
+            '100%DOD Energy (kWh)',
+            '100% DOD Energy',
+            'Energy (kWh)',
+        ):
+            if key in specs:
+                try:
+                    energy_kwh = float(str(specs[key]).replace(',', '').strip())
+                    break
+                except Exception:
+                    pass
+        if energy_kwh is None:
+            # Fallback: try first numeric value in the column
+            for v in specs.values():
+                try:
+                    energy_kwh = float(str(v).replace(',', '').strip())
+                    break
+                except Exception:
+                    continue
+        if energy_kwh is None or energy_kwh <= 0:
+            return 0
+
+        mode = (augmentation_mode or '').strip()
+        if mode in ('', 'N/A', 'Augmentation'):
+            from math import ceil
+            return max(0, int(ceil((capacity_required_kwh or 0.0) / energy_kwh)))
+        elif mode == 'Overbuild':
+            # TODO: Overbuild sizing rule to be provided; placeholder returns direct sizing for now.
+            from math import ceil
+            return max(0, int(ceil((capacity_required_kwh or 0.0) / energy_kwh)))
+        else:
+            # Unknown mode -> default direct sizing
+            from math import ceil
+            return max(0, int(ceil((capacity_required_kwh or 0.0) / energy_kwh)))
+    except Exception:
+        return 0
+
+
+def compute_confluence_cabinet_count(product: str, model: str | None, option_id: str, proposed_bess: int) -> str:
+    """Return Confluence Cabinet count per config.
+    EDGE rules:
+      - 760+DC, 760+DC+EPC -> ceil(BESS/5)
+      - 760+AC -> ceil(BESS/3)
+      - 760, 760+Dynapower -> "-"
+    GRID5015: not applicable -> return None to indicate hide.
+    """
+    p = (product or '').strip().upper()
+    if p == 'GRID5015':
+        return None
+    oid = (option_id or '').strip().lower()
+    try:
+        if oid in ('config_b') and model and 'dc' in (model or '').lower():
+            pass  # fallback to image/title not reliable; we use explicit mapping below
+    except Exception:
+        pass
+    # Map by image/component name embedded in option id is not sufficient; use heuristic by option image names
+    # We expect option_id values: config_a/config_b. Use components string to infer type in UI if needed.
+    # Here, we assume caller passes a derived tag of image name in option_id when available.
+    # Implement by checking known keywords in option_id or model+solution pairing in UI.
+    # For simplicity, let UI pass a tag; here we support image-like tags too.
+    tag = oid  # ui can pass '760', '760+dc', '760+dc+epc', '760+ac', '760+dynapower'
+    if tag in ('760+dc', '760+dc+epc'):
+        return str(max(0, ceil((proposed_bess or 0) / 5)))
+    if tag == '760+ac':
+        return str(max(0, ceil((proposed_bess or 0) / 3)))
+    if tag in ('760', '760+dynapower'):
+        return '-'
+    # Fallback: use solution_type hint via model string
+    m = (model or '').lower()
+    if 'ac' in m:
+        return str(max(0, ceil((proposed_bess or 0) / 3)))
+    if 'dc' in m:
+        return str(max(0, ceil((proposed_bess or 0) / 5)))
+    return '-'

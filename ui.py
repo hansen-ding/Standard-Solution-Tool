@@ -3,7 +3,8 @@ Streamlit 销售工具 - 项目信息输入页面
 """
 import streamlit as st
 from algorithm import (
-    to_kw, to_kwh, calculate_c_rate, format_c_rate, fetch_temperature, get_pcs_options
+    to_kw, to_kwh, calculate_c_rate, format_c_rate, fetch_temperature, get_pcs_options,
+    compute_proposed_bess_count, compute_confluence_cabinet_count
 )
 from datetime import datetime
 import io
@@ -427,7 +428,6 @@ if st.session_state.show_pcs_section:
     nav_spacer, nav_reload = st.columns([8.5, 1.5])
     with nav_reload:
         if st.button("Load Options ↻", key='reload_options', use_container_width=True):
-            # 更新产品相关选择
             st.session_state.data['product'] = product_inline
             st.session_state.data['edge_model'] = model_inline
             st.session_state.data['edge_solution'] = solution_inline
@@ -437,7 +437,7 @@ if st.session_state.show_pcs_section:
                 cur_capacity = st.session_state.get('capacity_input', None)
                 cur_capacity_unit = st.session_state.get('capacity_unit_select', 'kWh')
                 cur_power_kw = to_kw(cur_power if cur_power and cur_power > 0 else None, cur_power_unit)
-                # Fix typo: use cur_capacity and cur_capacity_unit
+                # Ensure consistent snake_case variables only
                 cur_capacity_kwh = to_kwh(cur_capacity if cur_capacity and cur_capacity > 0 else None, cur_capacity_unit)
                 cur_c_rate = calculate_c_rate(cur_power_kw, cur_capacity_kwh)
                 st.session_state.data['power_kw'] = cur_power_kw
@@ -457,10 +457,41 @@ if st.session_state.show_pcs_section:
     current_power_kw = st.session_state.data.get('power_kw')
     current_capacity_kwh = st.session_state.data.get('capacity_kwh')
     current_c_rate = calculate_c_rate(current_power_kw, current_capacity_kwh)
+    
+    # Compute proposed BESS count
+    current_augmentation = st.session_state.data.get('augmentation', '')
+    proposed_bess = 0
+    if current_product and current_capacity_kwh:
+        try:
+            proposed_bess = compute_proposed_bess_count(
+                capacity_required_kwh=current_capacity_kwh,
+                product=current_product,
+                model=current_model,
+                augmentation_mode=current_augmentation,
+            )
+        except Exception:
+            proposed_bess = 0
 
-    # 特定组合不推荐：EDGE 422/338kWh；GRID5015 的 DC
+    def infer_tag_from_image(img_path: str) -> str:
+        try:
+            name = (img_path or '').lower()
+            if '760+dc+epc' in name:
+                return '760+dc+epc'
+            if '760+dc' in name and 'epc' not in name:
+                return '760+dc'
+            if '760+ac' in name:
+                return '760+ac'
+            if '760+dynapower' in name:
+                return '760+dynapower'
+            if '760.png' in name or name.endswith('/760.png'):
+                return '760'
+        except Exception:
+            pass
+        return ''
+
+    # 特定组合不推荐：EDGE 422/338kWh 仅在 AC；GRID5015 的 DC
     no_recommend = (
-        (current_product == 'EDGE' and current_model in ['422kWh', '338kWh']) or
+        (current_product == 'EDGE' and current_solution == 'AC' and current_model in ['422kWh', '338kWh']) or
         (current_product == 'GRID5015' and current_solution == 'DC')
     )
 
@@ -504,17 +535,23 @@ if st.session_state.show_pcs_section:
                 if opt:
                     render_image_safe(opt.get("image"))
                     st.markdown(f'<div class="group-title">{selected_label} (Selected)</div>', unsafe_allow_html=True)
-                    # Show components from option data
+                    # Show components and new fields from option data
                     st.markdown(f"**System Components:** {opt.get('components','')}")
-                    st.markdown("**Proposed Number of BESS:**")
-                    st.markdown("**Proposed Number of Confluence Cabinet:**")
-                    st.markdown("**Proposed Number of PCS:**")
+                    st.markdown(f"**Architecture:** {opt.get('architecture','')}")
+                    st.markdown(f"**Origin:** {opt.get('origin','')}")
+                    st.markdown(f"**Proposed Number of BESS:** {proposed_bess}")
+                    tag_sel = infer_tag_from_image(opt.get('image',''))
+                    conf_sel = compute_confluence_cabinet_count(current_product, current_model, tag_sel, proposed_bess)
+                    if conf_sel is not None:
+                        st.markdown(f"**Proposed Number of Confluence Cabinet:** {conf_sel}")
+                    # Hide PCS line for 760 and 760+DC
+                    if tag_sel not in ('760', '760+dc'):
+                        st.markdown("**Proposed Number of PCS:**")
                     st.markdown("**System Nameplate Capacity:**")
                     st.markdown("**System DC Usable Capacity:**")
                     st.markdown("**System AC Usable Capacity:**")
                     st.markdown("**System Rated DC Power:**")
                     st.markdown("**System Rated AC Power:**")
-                    st.markdown("**PCS Skid Origin:**")
                     st.markdown("<br>", unsafe_allow_html=True)
     elif pcs_options:
         # 未选择时显示两个选项
@@ -527,17 +564,23 @@ if st.session_state.show_pcs_section:
                     if a_opt:
                         render_image_safe(a_opt.get("image"))
                         st.markdown('<div class="group-title">Configuration A</div>', unsafe_allow_html=True)
-                        # Show components from option data
                         st.markdown(f"**System Components:** {a_opt.get('components','')}")
-                        st.markdown("**Proposed Number of BESS:**")
-                        st.markdown("**Proposed Number of Confluence Cabinet:**")
-                        st.markdown("**Proposed Number of PCS:**")
+                        st.markdown(f"**Architecture:** {a_opt.get('architecture','')}")
+                        st.markdown(f"**Origin:** {a_opt.get('origin','')}")
+                        st.markdown(f"**Proposed Number of BESS:** {proposed_bess}")
+                        # Confluence Cabinet per option
+                        tag_a = infer_tag_from_image(a_opt.get('image',''))
+                        conf_a = compute_confluence_cabinet_count(current_product, current_model, tag_a, proposed_bess)
+                        if conf_a is not None:
+                            st.markdown(f"**Proposed Number of Confluence Cabinet:** {conf_a}")
+                        # Hide PCS line for 760 and 760+DC
+                        if tag_a not in ('760', '760+dc'):
+                            st.markdown("**Proposed Number of PCS:**")
                         st.markdown("**System Nameplate Capacity:**")
                         st.markdown("**System DC Usable Capacity:**")
                         st.markdown("**System AC Usable Capacity:**")
                         st.markdown("**System Rated DC Power:**")
                         st.markdown("**System Rated AC Power:**")
-                        st.markdown("**PCS Skid Origin:**")
                         st.markdown("<br>", unsafe_allow_html=True)
                         if st.button("Select Configuration A", key='select_pcs_a', use_container_width=True):
                             st.session_state.data['selected_pcs'] = 'Configuration A'
@@ -549,17 +592,23 @@ if st.session_state.show_pcs_section:
                     if b_opt:
                         render_image_safe(b_opt.get("image"))
                         st.markdown('<div class="group-title">Configuration B</div>', unsafe_allow_html=True)
-                        # Show components from option data
                         st.markdown(f"**System Components:** {b_opt.get('components','')}")
-                        st.markdown("**Proposed Number of BESS:**")
-                        st.markdown("**Proposed Number of Confluence Cabinet:**")
-                        st.markdown("**Proposed Number of PCS:**")
+                        st.markdown(f"**Architecture:** {b_opt.get('architecture','')}")
+                        st.markdown(f"**Origin:** {b_opt.get('origin','')}")
+                        st.markdown(f"**Proposed Number of BESS:** {proposed_bess}")
+                        # Confluence Cabinet per option
+                        tag_b = infer_tag_from_image(b_opt.get('image',''))
+                        conf_b = compute_confluence_cabinet_count(current_product, current_model, tag_b, proposed_bess)
+                        if conf_b is not None:
+                            st.markdown(f"**Proposed Number of Confluence Cabinet:** {conf_b}")
+                        # Hide PCS line for 760 and 760+DC
+                        if tag_b not in ('760', '760+dc'):
+                            st.markdown("**Proposed Number of PCS:**")
                         st.markdown("**System Nameplate Capacity:**")
                         st.markdown("**System DC Usable Capacity:**")
                         st.markdown("**System AC Usable Capacity:**")
                         st.markdown("**System Rated DC Power:**")
                         st.markdown("**System Rated AC Power:**")
-                        st.markdown("**PCS Skid Origin:**")
                         st.markdown("<br>", unsafe_allow_html=True)
                         if st.button("Select Configuration B", key='select_pcs_b', use_container_width=True):
                             st.session_state.data['selected_pcs'] = 'Configuration B'
