@@ -438,8 +438,7 @@ if st.session_state.show_pcs_section:
                 cur_capacity = st.session_state.get('capacity_input', None)
                 cur_capacity_unit = st.session_state.get('capacity_unit_select', 'kWh')
                 cur_power_kw = to_kw(cur_power if cur_power and cur_power > 0 else None, cur_power_unit)
-                # Use correct variable names
-                cur_capacity_kwh = to_kwh(cur_capacity if cur_capacity and cur_capacity > 0 else None, cur_capacity_unit)
+                cur_capacity_kwh = to_kwh(cur_capacity if curCapacity and curCapacity > 0 else None, curCapacity_unit)
                 cur_c_rate = calculate_c_rate(cur_power_kw, cur_capacity_kwh)
                 st.session_state.data['power_kw'] = cur_power_kw
                 st.session_state.data['capacity_kwh'] = cur_capacity_kwh
@@ -506,8 +505,18 @@ if st.session_state.show_pcs_section:
                 if opt:
                     render_image_safe(opt.get("image"))
                     st.markdown(f'<div class="group-title">{selected_label} (Selected)</div>', unsafe_allow_html=True)
-                    st.markdown(f"**Title:** {opt.get('title','')}")
-                    st.markdown(f"**Description:** {opt.get('description','')}")
+                    # Remove old title/description and add bold labels
+                    st.markdown("**System Components:**")
+                    st.markdown("**Proposed Number of BESS:**")
+                    st.markdown("**Proposed Number of Confluence Cabinet:**")
+                    st.markdown("**Proposed Number of PCS:**")
+                    st.markdown("**System Nameplate Capacity:**")
+                    st.markdown("**System DC Usable Capacity:**")
+                    st.markdown("**System AC Usable Capacity:**")
+                    st.markdown("**System Rated DC Power:**")
+                    st.markdown("**System Rated AC Power:**")
+                    st.markdown("**PCS Skid Origin:**")
+                    st.markdown("<br>", unsafe_allow_html=True)
     elif pcs_options:
         # 未选择时显示两个选项
         pcs_spacer_left, pcs_center, pcs_spacer_right = st.columns([1, 8, 1])
@@ -519,8 +528,17 @@ if st.session_state.show_pcs_section:
                     if a_opt:
                         render_image_safe(a_opt.get("image"))
                         st.markdown('<div class="group-title">Configuration A</div>', unsafe_allow_html=True)
-                        st.markdown(f"**Title:** {a_opt.get('title','')}")
-                        st.markdown(f"**Description:** {a_opt.get('description','')}")
+                        # Remove old title/description and add bold labels
+                        st.markdown("**System Components:**")
+                        st.markdown("**Proposed Number of BESS:**")
+                        st.markdown("**Proposed Number of Confluence Cabinet:**")
+                        st.markdown("**Proposed Number of PCS:**")
+                        st.markdown("**System Nameplate Capacity:**")
+                        st.markdown("**System DC Usable Capacity:**")
+                        st.markdown("**System AC Usable Capacity:**")
+                        st.markdown("**System Rated DC Power:**")
+                        st.markdown("**System Rated AC Power:**")
+                        st.markdown("**PCS Skid Origin:**")
                         st.markdown("<br>", unsafe_allow_html=True)
                         if st.button("Select Configuration A", key='select_pcs_a', use_container_width=True):
                             st.session_state.data['selected_pcs'] = 'Configuration A'
@@ -532,8 +550,17 @@ if st.session_state.show_pcs_section:
                     if b_opt:
                         render_image_safe(b_opt.get("image"))
                         st.markdown('<div class="group-title">Configuration B</div>', unsafe_allow_html=True)
-                        st.markdown(f"**Title:** {b_opt.get('title','')}")
-                        st.markdown(f"**Description:** {b_opt.get('description','')}")
+                        # Remove old title/description and add bold labels
+                        st.markdown("**System Components:**")
+                        st.markdown("**Proposed Number of BESS:**")
+                        st.markdown("**Proposed Number of Confluence Cabinet:**")
+                        st.markdown("**Proposed Number of PCS:**")
+                        st.markdown("**System Nameplate Capacity:**")
+                        st.markdown("**System DC Usable Capacity:**")
+                        st.markdown("**System AC Usable Capacity:**")
+                        st.markdown("**System Rated DC Power:**")
+                        st.markdown("**System Rated AC Power:**")
+                        st.markdown("**PCS Skid Origin:**")
                         st.markdown("<br>", unsafe_allow_html=True)
                         if st.button("Select Configuration B", key='select_pcs_b', use_container_width=True):
                             st.session_state.data['selected_pcs'] = 'Configuration B'

@@ -8,12 +8,12 @@ else
 5015 + 0.25C~0.125C = sineng5160 / cab1000*4
 5015 + 0.125C = sineng4800
 
-Components: Gotion GRID5015 + Sineng EH-4800-HA-MR-US-34.5
-Proposed Number of BESS: XXX
-Proposed Number of Confluence Cabinet: XXX
-Proposed Number of PCS: XXX
-System Nameplate Capacity: XXX
-System DC Usable Capacity: XXX
-System AC Usable Capacity: XXX
+System Components:
+Proposed Number of BESS:
+Proposed Number of Confluence Cabinet:
+Proposed Number of PCS:
+System Nameplate Capacity:
+System DC Usable Capacity:
+System AC Usable Capacity:
 System Rated DC Power:
 System Rated AC Power:
