@@ -153,13 +153,14 @@ def get_pcs_options(product: str, model: str = None, solution_type: str = None, 
     """
     base_assets = "images"
 
-    def make_option(opt_id, img, title="配置", desc="推荐搭配", tip="点击查看详情"):
+    def make_option(opt_id, img, title="配置", desc="推荐搭配", tip="点击查看详情", components: str = ""):
         return {
             "id": opt_id,
             "image": f"{base_assets}/{img}",
             "title": title,
             "description": desc,
             "tooltip": tip,
+            "components": components,
         }
 
     p = (product or "").strip().lower()
@@ -171,14 +172,14 @@ def get_pcs_options(product: str, model: str = None, solution_type: str = None, 
         # product=EDGE，solution type=DC -> A:760.png, B:760+DC.png
         if st == "dc":
             return [
-                make_option("config_a", "760.png", "Config A", "EDGE DC 方案：基础 760"),
-                make_option("config_b", "760+DC.png", "Config B", "EDGE DC 方案：760 + DC"),
+                make_option("config_a", "760.png", "Config A", "EDGE DC 方案：基础 760", components="Gotion EDGE BESS"),
+                make_option("config_b", "760+DC.png", "Config B", "EDGE DC 方案：760 + DC", components="Gotion EDGE BESS + Gotion DC Confluence Cabinet"),
             ]
         # product=EDGE, model=760kWh, solution type=AC -> A:760+DC+EPC.png, B:760+Dynapower.png
         if "760" in m and st == "ac":
             return [
-                make_option("config_a", "760+DC+EPC.png", "Config A", "EDGE AC 方案：760 + DC + EPC"),
-                make_option("config_b", "760+Dynapower.png", "Config B", "EDGE AC 方案：760 + Dynapower"),
+                make_option("config_a", "760+DC+EPC.png", "Config A", "EDGE AC 方案：760 + DC + EPC", components="Gotion EDGE BESS + Gotion DC Confluence Cabinet + EPC Power CAB1000/AC-3L.2"),
+                make_option("config_b", "760+Dynapower.png", "Config B", "EDGE AC 方案：760 + Dynapower", components="Gotion EDGE BESS + Dynapower MPS-125"),
             ]
         # product=EDGE, model=676到507kWh -> A:760+AC.png, B:760+Dynapower.png
         # 粗略判断型号字符串是否包含数值并位于 507–676 范围
@@ -189,8 +190,8 @@ def get_pcs_options(product: str, model: str = None, solution_type: str = None, 
         cap = parse_capacity_kwh(m)
         if cap is not None and 507 <= cap <= 676:
             return [
-                make_option("config_a", "760+AC.png", "Config A", "EDGE：760 + AC"),
-                make_option("config_b", "760+Dynapower.png", "Config B", "EDGE：760 + Dynapower"),
+                make_option("config_a", "760+AC.png", "Config A", "EDGE：760 + AC", components="Gotion EDGE BESS + Gotion AC Confluence Cabinet"),
+                make_option("config_b", "760+Dynapower.png", "Config B", "EDGE：760 + Dynapower", components="Gotion EDGE BESS + Dynapower MPS-125"),
             ]
 
     # 业务规则：grid5015
@@ -199,13 +200,13 @@ def get_pcs_options(product: str, model: str = None, solution_type: str = None, 
         # >0.25C <=0.5C 或 >0.125C <=0.25C -> A:5015+5160.png, B:5015+CAB1000.png
         if dr is not None and ((dr > 0.25 and dr <= 0.5) or (dr > 0.125 and dr <= 0.25)):
             return [
-                make_option("config_a", "5015+5160.png", "Config A", "GRID5015：5015 + 5160"),
-                make_option("config_b", "5015+CAB1000.png", "Config B", "GRID5015：5015 + CAB1000"),
+                make_option("config_a", "5015+5160.png", "Config A", "GRID5015：5015 + 5160", components="Gotion GRID5015 + Sineng EH-5160-HA-MR-US-34.5 Skid"),
+                make_option("config_b", "5015+CAB1000.png", "Config B", "GRID5015：5015 + CAB1000", components="Gotion GRID5015 + EPC Power CAB1000/AC-3L.2 Skid"),
             ]
         # <=0.125C -> 仅一个配置 5015+4800.png
         if dr is not None and dr <= 0.125:
             return [
-                make_option("config_a", "5015+4800.png", "Config", "GRID5015：5015 + 4800"),
+                make_option("config_a", "5015+4800.png", "Config", "GRID5015：5015 + 4800", components="Gotion GRID5015 + EH-4800-HA-MR-US-34.5"),
             ]
 
     # 其他产品沿用原默认 catalog

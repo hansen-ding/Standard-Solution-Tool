@@ -426,26 +426,25 @@ if st.session_state.show_pcs_section:
     # 导航与重载（仅保留 Reload Options 按钮）
     nav_spacer, nav_reload = st.columns([8.5, 1.5])
     with nav_reload:
-        if st.button("↻ Load Options", key='reload_options', use_container_width=True):
+        if st.button("Load Options ↻", key='reload_options', use_container_width=True):
             # 更新产品相关选择
             st.session_state.data['product'] = product_inline
             st.session_state.data['edge_model'] = model_inline
             st.session_state.data['edge_solution'] = solution_inline
-            # 从当前输入控件重算 C-rate（无需回到第一页点击 Next）
             try:
                 cur_power = st.session_state.get('power_input', None)
                 cur_power_unit = st.session_state.get('power_unit_select', 'kW')
                 cur_capacity = st.session_state.get('capacity_input', None)
                 cur_capacity_unit = st.session_state.get('capacity_unit_select', 'kWh')
                 cur_power_kw = to_kw(cur_power if cur_power and cur_power > 0 else None, cur_power_unit)
-                cur_capacity_kwh = to_kwh(cur_capacity if curCapacity and curCapacity > 0 else None, curCapacity_unit)
+                # Fix typo: use cur_capacity and cur_capacity_unit
+                cur_capacity_kwh = to_kwh(cur_capacity if cur_capacity and cur_capacity > 0 else None, cur_capacity_unit)
                 cur_c_rate = calculate_c_rate(cur_power_kw, cur_capacity_kwh)
                 st.session_state.data['power_kw'] = cur_power_kw
                 st.session_state.data['capacity_kwh'] = cur_capacity_kwh
                 st.session_state.data['discharge'] = format_c_rate(cur_c_rate) if cur_c_rate else ""
             except Exception:
-                pass
-            # 清空选中并刷新
+                st.session_state.data['discharge'] = ""
             st.session_state.data['selected_pcs'] = None
             st.session_state.show_results_section = False
             st.rerun()
@@ -505,8 +504,8 @@ if st.session_state.show_pcs_section:
                 if opt:
                     render_image_safe(opt.get("image"))
                     st.markdown(f'<div class="group-title">{selected_label} (Selected)</div>', unsafe_allow_html=True)
-                    # Remove old title/description and add bold labels
-                    st.markdown("**System Components:**")
+                    # Show components from option data
+                    st.markdown(f"**System Components:** {opt.get('components','')}")
                     st.markdown("**Proposed Number of BESS:**")
                     st.markdown("**Proposed Number of Confluence Cabinet:**")
                     st.markdown("**Proposed Number of PCS:**")
@@ -528,8 +527,8 @@ if st.session_state.show_pcs_section:
                     if a_opt:
                         render_image_safe(a_opt.get("image"))
                         st.markdown('<div class="group-title">Configuration A</div>', unsafe_allow_html=True)
-                        # Remove old title/description and add bold labels
-                        st.markdown("**System Components:**")
+                        # Show components from option data
+                        st.markdown(f"**System Components:** {a_opt.get('components','')}")
                         st.markdown("**Proposed Number of BESS:**")
                         st.markdown("**Proposed Number of Confluence Cabinet:**")
                         st.markdown("**Proposed Number of PCS:**")
@@ -550,8 +549,8 @@ if st.session_state.show_pcs_section:
                     if b_opt:
                         render_image_safe(b_opt.get("image"))
                         st.markdown('<div class="group-title">Configuration B</div>', unsafe_allow_html=True)
-                        # Remove old title/description and add bold labels
-                        st.markdown("**System Components:**")
+                        # Show components from option data
+                        st.markdown(f"**System Components:** {b_opt.get('components','')}")
                         st.markdown("**Proposed Number of BESS:**")
                         st.markdown("**Proposed Number of Confluence Cabinet:**")
                         st.markdown("**Proposed Number of PCS:**")
