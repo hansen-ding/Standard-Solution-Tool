@@ -4,7 +4,9 @@ Streamlit 销售工具 - 项目信息输入页面
 import streamlit as st
 from algorithm import (
     to_kw, to_kwh, calculate_c_rate, format_c_rate, fetch_temperature, get_pcs_options,
-    compute_proposed_bess_count, compute_confluence_cabinet_count
+    compute_proposed_bess_count, compute_confluence_cabinet_count, compute_pcs_count,
+    get_bess_specs_for, compute_system_dc_usable_capacity, compute_system_ac_usable_capacity,
+    compute_system_rated_dc_power, compute_system_rated_ac_power
 )
 from datetime import datetime
 import io
@@ -242,7 +244,7 @@ with col_left:
             location = st.text_input("Location (City or Zipcode):", value=st.session_state.data['location'], key='location')
         with location_col2:
             st.markdown('<div style="height: 28px;"></div>', unsafe_allow_html=True)
-            fetch_clicked = st.button("Fetch Temp", use_container_width=True)
+            fetch_clicked = st.button("Fetch Temp", width="stretch")
         
         # 检测回车键：当 location 改变且不为空时也触发 fetch
         location_changed = location != st.session_state.data['location']
@@ -424,30 +426,31 @@ if st.session_state.show_pcs_section:
             key='solution_inline'
         )
 
-    # 导航与重载（仅保留 Reload Options 按钮）
-    nav_spacer, nav_reload = st.columns([8.5, 1.5])
-    with nav_reload:
-        if st.button("Load Options ↻", key='reload_options', use_container_width=True):
-            st.session_state.data['product'] = product_inline
-            st.session_state.data['edge_model'] = model_inline
-            st.session_state.data['edge_solution'] = solution_inline
-            try:
-                cur_power = st.session_state.get('power_input', None)
-                cur_power_unit = st.session_state.get('power_unit_select', 'kW')
-                cur_capacity = st.session_state.get('capacity_input', None)
-                cur_capacity_unit = st.session_state.get('capacity_unit_select', 'kWh')
-                cur_power_kw = to_kw(cur_power if cur_power and cur_power > 0 else None, cur_power_unit)
-                # Ensure consistent snake_case variables only
-                cur_capacity_kwh = to_kwh(cur_capacity if cur_capacity and cur_capacity > 0 else None, cur_capacity_unit)
-                cur_c_rate = calculate_c_rate(cur_power_kw, cur_capacity_kwh)
-                st.session_state.data['power_kw'] = cur_power_kw
-                st.session_state.data['capacity_kwh'] = cur_capacity_kwh
-                st.session_state.data['discharge'] = format_c_rate(cur_c_rate) if cur_c_rate else ""
-            except Exception:
-                st.session_state.data['discharge'] = ""
-            st.session_state.data['selected_pcs'] = None
-            st.session_state.show_results_section = False
-            st.rerun()
+    # 导航与重载（仅在未选择 PCS 时显示 Reload Options 按钮）
+    if not st.session_state.data.get('selected_pcs'):
+        nav_spacer, nav_reload = st.columns([8.5, 1.5])
+        with nav_reload:
+            if st.button("Load Options ↻", key='reload_options', use_container_width=True):
+                st.session_state.data['product'] = product_inline
+                st.session_state.data['edge_model'] = model_inline
+                st.session_state.data['edge_solution'] = solution_inline
+                try:
+                    cur_power = st.session_state.get('power_input', None)
+                    cur_power_unit = st.session_state.get('power_unit_select', 'kW')
+                    cur_capacity = st.session_state.get('capacity_input', None)
+                    cur_capacity_unit = st.session_state.get('capacity_unit_select', 'kWh')
+                    cur_power_kw = to_kw(cur_power if cur_power and cur_power > 0 else None, cur_power_unit)
+                    # Ensure consistent snake_case variables only
+                    cur_capacity_kwh = to_kwh(cur_capacity if cur_capacity and cur_capacity > 0 else None, cur_capacity_unit)
+                    cur_c_rate = calculate_c_rate(cur_power_kw, cur_capacity_kwh)
+                    st.session_state.data['power_kw'] = cur_power_kw
+                    st.session_state.data['capacity_kwh'] = cur_capacity_kwh
+                    st.session_state.data['discharge'] = format_c_rate(cur_c_rate) if cur_c_rate else ""
+                except Exception:
+                    st.session_state.data['discharge'] = ""
+                st.session_state.data['selected_pcs'] = None
+                st.session_state.show_results_section = False
+                st.rerun()
 
     # 准备选项数据（按当前输入生成)，空白状态处理
     current_product = st.session_state.data.get('product')
@@ -472,6 +475,47 @@ if st.session_state.show_pcs_section:
         except Exception:
             proposed_bess = 0
 
+    # Compute System Nameplate Capacity (sync unit with first page input)
+    system_nameplate_value = None
+    system_nameplate_unit = st.session_state.data.get('capacity_unit', 'kWh')
+    system_dc_usable_value = None
+    system_dc_usable_unit = system_nameplate_unit
+    system_ac_usable_value = None
+    system_ac_usable_unit = system_nameplate_unit
+    system_rated_dc_power_value = None
+    system_rated_dc_power_unit = st.session_state.data.get('power_unit', 'kW')
+    try:
+        specs = get_bess_specs_for(current_product, current_model)
+        energy_kwh = specs.get('100% DOD Energy (kWh)')
+        energy_kwh = float(str(energy_kwh).replace(',', '').strip()) if energy_kwh not in (None, '') else None
+        if energy_kwh is not None:
+            total_kwh = (proposed_bess or 0) * energy_kwh
+            if system_nameplate_unit == 'MWh':
+                system_nameplate_value = round(total_kwh / 1000.0, 3)
+            else:
+                system_nameplate_value = round(total_kwh, 3)
+            # Compute DC Usable Capacity
+            system_dc_usable_value, system_dc_usable_unit = compute_system_dc_usable_capacity(
+                proposed_bess, energy_kwh, current_product, system_nameplate_unit
+            )
+            # Compute AC Usable Capacity from DC Usable
+            if system_dc_usable_value is not None:
+                # Convert DC usable back to kWh for calculation
+                dc_kwh = system_dc_usable_value * 1000 if system_dc_usable_unit == 'MWh' else system_dc_usable_value
+                system_ac_usable_value, system_ac_usable_unit = compute_system_ac_usable_capacity(
+                    dc_kwh, system_nameplate_unit
+                )
+                # Compute System Rated DC Power
+                if current_c_rate is not None:
+                    system_rated_dc_power_value, system_rated_dc_power_unit = compute_system_rated_dc_power(
+                        dc_kwh, current_c_rate, system_rated_dc_power_unit
+                    )
+    except Exception:
+        system_nameplate_value = None
+        system_dc_usable_value = None
+        system_ac_usable_value = None
+        system_rated_dc_power_value = None
+
     def infer_tag_from_image(img_path: str) -> str:
         try:
             name = (img_path or '').lower()
@@ -485,9 +529,51 @@ if st.session_state.show_pcs_section:
                 return '760+dynapower'
             if '760.png' in name or name.endswith('/760.png'):
                 return '760'
+            # GRID5015 tags
+            if '5015+5160' in name:
+                return '5015+5160'
+            if '5015+cab1000' in name or 'cab1000' in name:
+                return '5015+cab1000'
+            if '5015+4800' in name or '4800' in name:
+                return '5015+4800'
         except Exception:
             pass
         return ''
+    
+    def compute_metrics_for_config(option_tag: str) -> dict:
+        """Compute all metrics for a specific configuration."""
+        metrics = {
+            'pcs_count': None,
+            'pcs_count_str': None,
+            'rated_ac_power_value': None,
+            'rated_ac_power_unit': system_rated_dc_power_unit,
+        }
+        
+        # PCS count (skip 760 and 760+DC)
+        if option_tag not in ('760', '760+dc'):
+            pcs_str = compute_pcs_count(
+                product=current_product,
+                option_tag=option_tag,
+                proposed_bess=proposed_bess,
+                power_kw=current_power_kw,
+                discharge_rate=(st.session_state.data.get('discharge') or current_c_rate),
+            )
+            metrics['pcs_count_str'] = pcs_str
+            try:
+                metrics['pcs_count'] = int(pcs_str) if pcs_str not in ('-', '') else None
+            except Exception:
+                metrics['pcs_count'] = None
+        
+        # System Rated AC Power
+        if system_ac_usable_value is not None:
+            ac_kwh = system_ac_usable_value * 1000 if system_ac_usable_unit == 'MWh' else system_ac_usable_value
+            rated_ac_val, rated_ac_unit = compute_system_rated_ac_power(
+                ac_kwh, current_c_rate, metrics['pcs_count'], option_tag, system_rated_dc_power_unit
+            )
+            metrics['rated_ac_power_value'] = rated_ac_val
+            metrics['rated_ac_power_unit'] = rated_ac_unit
+        
+        return metrics
 
     # 特定组合不推荐：EDGE 422/338kWh 仅在 AC；GRID5015 的 DC
     no_recommend = (
@@ -544,14 +630,35 @@ if st.session_state.show_pcs_section:
                     conf_sel = compute_confluence_cabinet_count(current_product, current_model, tag_sel, proposed_bess)
                     if conf_sel is not None:
                         st.markdown(f"**Proposed Number of Confluence Cabinet:** {conf_sel}")
-                    # Hide PCS line for 760 and 760+DC
-                    if tag_sel not in ('760', '760+dc'):
-                        st.markdown("**Proposed Number of PCS:**")
-                    st.markdown("**System Nameplate Capacity:**")
-                    st.markdown("**System DC Usable Capacity:**")
-                    st.markdown("**System AC Usable Capacity:**")
-                    st.markdown("**System Rated DC Power:**")
-                    st.markdown("**System Rated AC Power:**")
+                    # Compute metrics for this config
+                    metrics_sel = compute_metrics_for_config(tag_sel)
+                    if metrics_sel['pcs_count_str'] is not None:
+                        st.markdown(f"**Proposed Number of PCS:** {metrics_sel['pcs_count_str']}")
+                    # System Nameplate Capacity
+                    if system_nameplate_value is not None:
+                        st.markdown(f"**System Nameplate Capacity:** {system_nameplate_value} {system_nameplate_unit}")
+                    else:
+                        st.markdown("**System Nameplate Capacity:**")
+                    # System DC Usable Capacity
+                    if system_dc_usable_value is not None:
+                        st.markdown(f"**System DC Usable Capacity:** {system_dc_usable_value} {system_dc_usable_unit}")
+                    else:
+                        st.markdown("**System DC Usable Capacity:**")
+                    # System AC Usable Capacity
+                    if system_ac_usable_value is not None:
+                        st.markdown(f"**System AC Usable Capacity:** {system_ac_usable_value} {system_ac_usable_unit}")
+                    else:
+                        st.markdown("**System AC Usable Capacity:**")
+                    # System Rated DC Power
+                    if system_rated_dc_power_value is not None:
+                        st.markdown(f"**System Rated DC Power:** {system_rated_dc_power_value} {system_rated_dc_power_unit}")
+                    else:
+                        st.markdown("**System Rated DC Power:**")
+                    # System Rated AC Power
+                    if metrics_sel['rated_ac_power_value'] is not None:
+                        st.markdown(f"**System Rated AC Power:** {metrics_sel['rated_ac_power_value']} {metrics_sel['rated_ac_power_unit']}")
+                    else:
+                        st.markdown("**System Rated AC Power:**")
                     st.markdown("<br>", unsafe_allow_html=True)
     elif pcs_options:
         # 未选择时显示两个选项
@@ -573,14 +680,35 @@ if st.session_state.show_pcs_section:
                         conf_a = compute_confluence_cabinet_count(current_product, current_model, tag_a, proposed_bess)
                         if conf_a is not None:
                             st.markdown(f"**Proposed Number of Confluence Cabinet:** {conf_a}")
-                        # Hide PCS line for 760 and 760+DC
-                        if tag_a not in ('760', '760+dc'):
-                            st.markdown("**Proposed Number of PCS:**")
-                        st.markdown("**System Nameplate Capacity:**")
-                        st.markdown("**System DC Usable Capacity:**")
-                        st.markdown("**System AC Usable Capacity:**")
-                        st.markdown("**System Rated DC Power:**")
-                        st.markdown("**System Rated AC Power:**")
+                        # Compute metrics for config A
+                        metrics_a = compute_metrics_for_config(tag_a)
+                        if metrics_a['pcs_count_str'] is not None:
+                            st.markdown(f"**Proposed Number of PCS:** {metrics_a['pcs_count_str']}")
+                        # System Nameplate Capacity
+                        if system_nameplate_value is not None:
+                            st.markdown(f"**System Nameplate Capacity:** {system_nameplate_value} {system_nameplate_unit}")
+                        else:
+                            st.markdown("**System Nameplate Capacity:**")
+                        # System DC Usable Capacity
+                        if system_dc_usable_value is not None:
+                            st.markdown(f"**System DC Usable Capacity:** {system_dc_usable_value} {system_dc_usable_unit}")
+                        else:
+                            st.markdown("**System DC Usable Capacity:**")
+                        # System AC Usable Capacity
+                        if system_ac_usable_value is not None:
+                            st.markdown(f"**System AC Usable Capacity:** {system_ac_usable_value} {system_ac_usable_unit}")
+                        else:
+                            st.markdown("**System AC Usable Capacity:**")
+                        # System Rated DC Power
+                        if system_rated_dc_power_value is not None:
+                            st.markdown(f"**System Rated DC Power:** {system_rated_dc_power_value} {system_rated_dc_power_unit}")
+                        else:
+                            st.markdown("**System Rated DC Power:**")
+                        # System Rated AC Power
+                        if metrics_a['rated_ac_power_value'] is not None:
+                            st.markdown(f"**System Rated AC Power:** {metrics_a['rated_ac_power_value']} {metrics_a['rated_ac_power_unit']}")
+                        else:
+                            st.markdown("**System Rated AC Power:**")
                         st.markdown("<br>", unsafe_allow_html=True)
                         if st.button("Select Configuration A", key='select_pcs_a', use_container_width=True):
                             st.session_state.data['selected_pcs'] = 'Configuration A'
@@ -601,14 +729,35 @@ if st.session_state.show_pcs_section:
                         conf_b = compute_confluence_cabinet_count(current_product, current_model, tag_b, proposed_bess)
                         if conf_b is not None:
                             st.markdown(f"**Proposed Number of Confluence Cabinet:** {conf_b}")
-                        # Hide PCS line for 760 and 760+DC
-                        if tag_b not in ('760', '760+dc'):
-                            st.markdown("**Proposed Number of PCS:**")
-                        st.markdown("**System Nameplate Capacity:**")
-                        st.markdown("**System DC Usable Capacity:**")
-                        st.markdown("**System AC Usable Capacity:**")
-                        st.markdown("**System Rated DC Power:**")
-                        st.markdown("**System Rated AC Power:**")
+                        # Compute metrics for config B
+                        metrics_b = compute_metrics_for_config(tag_b)
+                        if metrics_b['pcs_count_str'] is not None:
+                            st.markdown(f"**Proposed Number of PCS:** {metrics_b['pcs_count_str']}")
+                        # System Nameplate Capacity
+                        if system_nameplate_value is not None:
+                            st.markdown(f"**System Nameplate Capacity:** {system_nameplate_value} {system_nameplate_unit}")
+                        else:
+                            st.markdown("**System Nameplate Capacity:**")
+                        # System DC Usable Capacity
+                        if system_dc_usable_value is not None:
+                            st.markdown(f"**System DC Usable Capacity:** {system_dc_usable_value} {system_dc_usable_unit}")
+                        else:
+                            st.markdown("**System DC Usable Capacity:**")
+                        # System AC Usable Capacity
+                        if system_ac_usable_value is not None:
+                            st.markdown(f"**System AC Usable Capacity:** {system_ac_usable_value} {system_ac_usable_unit}")
+                        else:
+                            st.markdown("**System AC Usable Capacity:**")
+                        # System Rated DC Power
+                        if system_rated_dc_power_value is not None:
+                            st.markdown(f"**System Rated DC Power:** {system_rated_dc_power_value} {system_rated_dc_power_unit}")
+                        else:
+                            st.markdown("**System Rated DC Power:**")
+                        # System Rated AC Power
+                        if metrics_b['rated_ac_power_value'] is not None:
+                            st.markdown(f"**System Rated AC Power:** {metrics_b['rated_ac_power_value']} {metrics_b['rated_ac_power_unit']}")
+                        else:
+                            st.markdown("**System Rated AC Power:**")
                         st.markdown("<br>", unsafe_allow_html=True)
                         if st.button("Select Configuration B", key='select_pcs_b', use_container_width=True):
                             st.session_state.data['selected_pcs'] = 'Configuration B'
@@ -623,18 +772,13 @@ if st.session_state.show_pcs_section:
 # ==========================================
 
 if st.session_state.show_results_section:
-    st.markdown('<div id="results-section"></div>', unsafe_allow_html=True)
     st.markdown("<br><br>", unsafe_allow_html=True)
     
-    # 添加导航按钮
-    nav_col1, nav_col2, nav_col3 = st.columns([7.6, 1.2, 1.2])
-    with nav_col2:
-        if st.button("← Edit Info", key='edit_info_results', use_container_width=True):
-            st.session_state.show_pcs_section = False
-            st.session_state.show_results_section = False
-            st.rerun()
-    with nav_col3:
-        if st.button("↻ Change PCS", key='change_pcs', use_container_width=True):
+    # 添加 Reload Options 按钮（替换原来的导航按钮）
+    nav_spacer, nav_reload = st.columns([8.5, 1.5])
+    with nav_reload:
+        if st.button("Reload Options ↻", key='reload_options_results', use_container_width=True):
+            # 重新加载产品选项，清除选择状态
             st.session_state.data['selected_pcs'] = None
             st.session_state.show_results_section = False
             st.rerun()

@@ -422,3 +422,228 @@ def compute_confluence_cabinet_count(product: str, model: str | None, option_id:
     if 'dc' in m:
         return str(max(0, ceil((proposed_bess or 0) / 5)))
     return '-'
+
+
+def compute_pcs_count(
+    product: str,
+    option_tag: str,
+    proposed_bess: int,
+    power_kw: float | None,
+    discharge_rate: float | str | None,
+    bess_specs_sheet: int | str = 0,
+) -> str:
+    """Compute Proposed Number of PCS per configuration.
+    Handles discharge_rate provided as float or string like '0.5C'.
+    """
+    from math import ceil
+    
+    tag = (option_tag or '').strip().lower()
+    p = (product or '').strip().upper()
+    # Normalize discharge rate to float
+    dr_val: float = 0.0
+    try:
+        if isinstance(discharge_rate, (int, float)):
+            dr_val = float(discharge_rate)
+        else:
+            s = str(discharge_rate or '').strip().upper()
+            if s.endswith('C'):
+                s = s[:-1]
+            dr_val = float(s) if s else 0.0
+    except Exception:
+        dr_val = 0.0
+    # EDGE
+    if p == 'EDGE':
+        if tag in ('760', '760+dc'):
+            return '-'
+        if tag == '760+dc+epc':
+            try:
+                return str(max(0, ceil(((power_kw or 0.0) / 1043.0))))
+            except Exception:
+                return '0'
+        if tag in ('760+dynapower', '760+ac'):
+            try:
+                return str(int(max(0, proposed_bess) * 2))
+            except Exception:
+                return '0'
+        return '0'
+    # GRID5015
+    if p == 'GRID5015':
+        try:
+            if dr_val > 0.25 and dr_val <= 0.5:
+                return str(max(0, ceil((proposed_bess or 0) / 2)))
+            elif dr_val > 0.125 and dr_val <= 0.25:
+                return str(max(0, ceil((proposed_bess or 0) / 4)))
+            else:  # dr_val <= 0.125
+                return str(max(0, ceil((proposed_bess or 0) / 6)))
+        except Exception:
+            return '0'
+    return '0'
+
+
+def compute_system_dc_usable_capacity(
+    proposed_bess: int,
+    energy_kwh_per_bess: float | None,
+    product: str,
+    capacity_unit: str = 'kWh',
+    dod: float = 0.95,
+    discharge_efficiency: float = 0.9732
+) -> tuple[float | None, str]:
+    """Compute System DC Usable Capacity.
+    Formula: Proposed BESS × 100% DOD Energy × DOD × Discharge Efficiency × Calendar Degradation
+    
+    Parameters:
+    - proposed_bess: Number of BESS containers
+    - energy_kwh_per_bess: 100% DOD Energy per BESS (kWh)
+    - product: Product type ('EDGE' or 'GRID5015')
+    - capacity_unit: Output unit ('kWh' or 'MWh')
+    - dod: Depth of Discharge, default 95%
+    - discharge_efficiency: Discharge efficiency, default 97.32%
+    
+    Calendar Degradation:
+    - EDGE: 95.65%
+    - GRID5015: 98.08%
+    
+    Returns: (value, unit) or (None, unit) if cannot compute.
+    """
+    if energy_kwh_per_bess is None or energy_kwh_per_bess <= 0 or proposed_bess <= 0:
+        return None, capacity_unit
+    try:
+        # Determine calendar degradation based on product
+        p = (product or '').strip().upper()
+        if p == 'EDGE':
+            calendar_degradation = 0.9565
+        elif p == 'GRID5015':
+            calendar_degradation = 0.9808
+        else:
+            calendar_degradation = 1.0  # fallback
+        
+        total_kwh = (
+            energy_kwh_per_bess 
+            * proposed_bess 
+            * dod 
+            * discharge_efficiency 
+            * calendar_degradation
+        )
+        
+        if capacity_unit == 'MWh':
+            return round(total_kwh / 1000.0, 3), 'MWh'
+        else:
+            return round(total_kwh, 3), 'kWh'
+    except Exception:
+        return None, capacity_unit
+
+
+def compute_system_ac_usable_capacity(
+    dc_usable_kwh: float | None,
+    capacity_unit: str = 'kWh',
+    discharge_efficiency: float = 0.9732
+) -> tuple[float | None, str]:
+    """Compute System AC Usable Capacity.
+    Formula: DC Usable × Discharge Efficiency (97.32%)
+    
+    Parameters:
+    - dc_usable_kwh: DC Usable Capacity in kWh
+    - capacity_unit: Output unit ('kWh' or 'MWh')
+    - discharge_efficiency: Discharge efficiency, default 97.32%
+    
+    Returns: (value, unit) or (None, unit) if cannot compute.
+    """
+    if dc_usable_kwh is None or dc_usable_kwh <= 0:
+        return None, capacity_unit
+    try:
+        ac_usable_kwh = dc_usable_kwh * discharge_efficiency
+        
+        if capacity_unit == 'MWh':
+            return round(ac_usable_kwh / 1000.0, 3), 'MWh'
+        else:
+            return round(ac_usable_kwh, 3), 'kWh'
+    except Exception:
+        return None, capacity_unit
+
+
+def compute_system_rated_dc_power(
+    dc_usable_kwh: float | None,
+    discharge_rate: float | None,
+    power_unit: str = 'kW'
+) -> tuple[float | None, str]:
+    """Compute System Rated DC Power.
+    Formula: System DC Usable × Discharge Rate
+    
+    Parameters:
+    - dc_usable_kwh: DC Usable Capacity in kWh
+    - discharge_rate: Discharge rate (C-rate) as a float (e.g., 0.5 for 0.5C)
+    - power_unit: Output unit ('kW' or 'MW')
+    
+    Returns: (value, unit) or (None, unit) if cannot compute.
+    """
+    if dc_usable_kwh is None or dc_usable_kwh <= 0 or discharge_rate is None or discharge_rate <= 0:
+        return None, power_unit
+    try:
+        rated_dc_kw = dc_usable_kwh * discharge_rate
+        
+        if power_unit == 'MW':
+            return round(rated_dc_kw / 1000.0, 3), 'MW'
+        else:
+            return round(rated_dc_kw, 3), 'kW'
+    except Exception:
+        return None, power_unit
+
+
+def compute_system_rated_ac_power(
+    ac_usable_kwh: float | None,
+    discharge_rate: float | None,
+    pcs_count: int | None,
+    option_tag: str,
+    power_unit: str = 'kW'
+) -> tuple[float | None, str]:
+    """Compute System Rated AC Power.
+    
+    Formula:
+    - Default: AC Usable × Discharge Rate
+    - Special cases (760+Dynapower, 760+AC): Number of PCS × 125 kW
+      BUT if (Number of PCS × 125 kW) > (AC Usable × 0.5C), use default formula instead
+    
+    Parameters:
+    - ac_usable_kwh: AC Usable Capacity in kWh
+    - discharge_rate: Discharge rate (C-rate) as a float (e.g., 0.5 for 0.5C)
+    - pcs_count: Number of PCS (for special cases)
+    - option_tag: Configuration tag to identify special cases
+    - power_unit: Output unit ('kW' or 'MW')
+    
+    Returns: (value, unit) or (None, unit) if cannot compute.
+    """
+    tag = (option_tag or '').strip().lower()
+    
+    # Special cases: 760+Dynapower and 760+AC
+    if tag in ('760+dynapower', '760+ac'):
+        if pcs_count is not None and pcs_count > 0 and ac_usable_kwh is not None and ac_usable_kwh > 0:
+            try:
+                special_formula_kw = pcs_count * 125.0
+                # Threshold is 0.5C of AC Usable (equivalent to AC Usable / 2 hours = AC Usable * 0.5)
+                threshold_kw = ac_usable_kwh * 0.5
+                
+                # If special formula exceeds threshold, use default formula
+                if special_formula_kw > threshold_kw:
+                    # Fall through to default case
+                    pass
+                else:
+                    # Use special formula
+                    if power_unit == 'MW':
+                        return round(special_formula_kw / 1000.0, 3), 'MW'
+                    else:
+                        return round(special_formula_kw, 3), 'kW'
+            except Exception:
+                pass
+    
+    # Default case: AC Usable × Discharge Rate
+    if ac_usable_kwh is None or ac_usable_kwh <= 0 or discharge_rate is None or discharge_rate <= 0:
+        return None, power_unit
+    try:
+        rated_ac_kw = ac_usable_kwh * discharge_rate
+        
+        if power_unit == 'MW':
+            return round(rated_ac_kw / 1000.0, 3), 'MW'
+        else:
+            return round(rated_ac_kw, 3), 'kW'
+    except Exception:
+        return None, power_unit
