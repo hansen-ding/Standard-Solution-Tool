@@ -647,3 +647,460 @@ def compute_system_rated_ac_power(
             return round(rated_ac_kw, 3), 'kW'
     except Exception:
         return None, power_unit
+
+
+def get_degradation_curve(
+    product: str,
+    cycles_per_year: int,
+    discharge_rate: float,
+    xlsx_path: str = DEGRADATION_XLSX,
+    sheet: int | str = 0,
+    debug: bool = True
+) -> dict:
+    """
+    Filter and load degradation curve data from Degradation.xlsx.
+    
+    Filtering rules:
+    1. Cell: 300 for EDGE, 314 for GRID5015
+    2. Cycle: find nearest match to cycles_per_year (e.g., 350 -> 365)
+    3. P-rate: find nearest match to discharge_rate (e.g., 0.125 -> 0.125)
+    
+    Parameters:
+    - product: 'EDGE' or 'GRID5015'
+    - cycles_per_year: annual cycle count (e.g., 365)
+    - discharge_rate: C-rate value (e.g., 0.5)
+    - xlsx_path: path to Degradation.xlsx
+    - sheet: sheet name or index
+    - debug: if True, print debug info
+    
+    Returns:
+    - dict with keys:
+        - 'deg_0' to 'deg_20': cycle degradation factors
+        - 'CD_0' to 'CD_24': calendar degradation factors
+        - 'filter_info': dict with matched filter values
+    """
+    import numpy as np
+    
+    # Load degradation table
+    df = load_degradation_table(xlsx_path, sheet)
+    
+    # Normalize column names (strip whitespace and convert to lowercase for matching)
+    df.columns = [str(col).strip() for col in df.columns]
+    col_map = {col.lower(): col for col in df.columns}
+    
+    # 1. Filter by Cell (300 for EDGE, 314 for GRID5015)
+    p = (product or '').strip().upper()
+    target_cell = 300 if p == 'EDGE' else 314
+    
+    # Find 'cell' column (case-insensitive)
+    cell_col = col_map.get('cell')
+    if not cell_col:
+        raise KeyError(f"Column 'cell' not found in Degradation.xlsx. Available columns: {list(df.columns)}")
+    # Find 'cell' column (case-insensitive)
+    cell_col = col_map.get('cell')
+    if not cell_col:
+        raise KeyError(f"Column 'cell' not found in Degradation.xlsx. Available columns: {list(df.columns)}")
+    
+    df_filtered = df[df[cell_col] == target_cell].copy()
+    
+    if len(df_filtered) == 0:
+        raise ValueError(f"No rows found with {cell_col}={target_cell} for product={product}")
+    
+    # 2. Filter by Cycle (find nearest match)
+    cycle_col = col_map.get('cycle') or col_map.get('cycles/year')
+    if not cycle_col:
+        raise KeyError(f"Column 'cycle' not found in Degradation.xlsx. Available columns: {list(df_filtered.columns)}")
+    # 2. Filter by Cycle (find nearest match)
+    cycle_col = col_map.get('cycle') or col_map.get('cycles/year')
+    if not cycle_col:
+        raise KeyError(f"Column 'cycle' not found in Degradation.xlsx. Available columns: {list(df_filtered.columns)}")
+    
+    available_cycles = df_filtered[cycle_col].dropna().unique()
+    nearest_cycle = min(available_cycles, key=lambda x: abs(x - cycles_per_year))
+    
+    df_filtered = df_filtered[df_filtered[cycle_col] == nearest_cycle].copy()
+    
+    if len(df_filtered) == 0:
+        raise ValueError(f"No rows found with cycle={nearest_cycle}")
+    
+    # 3. Filter by P-rate (find nearest match)
+    # Column name might be 'P-rate' or 'P rate' or similar
+    prate_col = None
+    for col in df_filtered.columns:
+        if 'p' in col.lower() and 'rate' in col.lower():
+            prate_col = col
+            break
+    
+    if prate_col is None:
+        raise KeyError("Column 'P-rate' (or similar) not found in Degradation.xlsx")
+    
+    available_prates = df_filtered[prate_col].dropna().unique()
+    nearest_prate = min(available_prates, key=lambda x: abs(x - discharge_rate))
+    
+    df_filtered = df_filtered[df_filtered[prate_col] == nearest_prate].copy()
+    
+    if len(df_filtered) == 0:
+        raise ValueError(f"No rows found with {prate_col}={nearest_prate}")
+    
+    # 4. Select first matching row
+    if len(df_filtered) > 1 and debug:
+        print(f"[DEBUG] Multiple rows matched filters, using first row")
+    
+    row = df_filtered.iloc[0]
+    
+    # 5. Extract deg_0 to deg_20 (look for '0 year', '1 year', etc.)
+    deg_data = {}
+    
+    # Debug: print all column names to see what we have
+    if debug:
+        print(f"\n[DEBUG] All columns in filtered row: {list(row.index)}")
+    
+    for i in range(21):
+        # Try multiple column name formats
+        possible_names = [
+            f'{i} year',
+            f'{i}year',
+            f'{i} yr',
+            f'{i}yr',
+            f'deg_{i}',
+            f'{i}yr',  # without space
+            f'{i} y',   # just 'y'
+        ]
+        
+        value = None
+        matched_col = None
+        for col_name in possible_names:
+            if col_name in row.index:
+                value = float(row[col_name]) if pd.notna(row[col_name]) else None
+                matched_col = col_name
+                break
+        
+        if debug and i < 3:  # Only print first 3 for brevity
+            print(f"[DEBUG] Year {i}: tried {possible_names}, matched '{matched_col}', value={value}")
+        
+        deg_data[f'deg_{i}'] = value
+    
+    # 6. Extract CD_0 to CD_24
+    cd_data = {}
+    for i in range(25):
+        col_name = f'CD_{i}'
+        if col_name in row.index:
+            cd_data[col_name] = float(row[col_name]) if pd.notna(row[col_name]) else None
+        else:
+            cd_data[col_name] = None
+    
+    # 7. Prepare result
+    result = {
+        **deg_data,
+        **cd_data,
+        'filter_info': {
+            'product': product,
+            'target_cell': target_cell,
+            'input_cycles_per_year': cycles_per_year,
+            'matched_cycle': int(nearest_cycle),
+            'input_discharge_rate': discharge_rate,
+            'matched_prate': float(nearest_prate),
+        }
+    }
+    
+    # 8. Debug output
+    if debug:
+        print("\n" + "="*60)
+        print("DEGRADATION CURVE DEBUG INFO")
+        print("="*60)
+        print(f"Product: {product}")
+        print(f"Target Cell: {target_cell}")
+        print(f"Input Cycles/Year: {cycles_per_year} → Matched: {int(nearest_cycle)}")
+        print(f"Input P-rate: {discharge_rate} → Matched: {nearest_prate}")
+        print("\n--- Cycle Degradation Factors (deg_0 to deg_20) ---")
+        for i in range(21):
+            val = deg_data.get(f'deg_{i}')
+            print(f"Year {i:2d}: {val if val is not None else 'N/A'}")
+        print("\n--- Calendar Degradation Factors (CD_0 to CD_24) ---")
+        for i in range(25):
+            val = cd_data.get(f'CD_{i}')
+            print(f"Month {i:2d}: {val if val is not None else 'N/A'}")
+        print("="*60 + "\n")
+    
+    return result
+
+
+def compute_soh_percent(
+    degradation_curve: dict,
+    product: str,
+) -> list:
+    """
+    Compute SOH% (State of Health) for years 0-20.
+    
+    Formula: SOH_r = deg_r × calendar_degradation
+    
+    Calendar Degradation:
+    - EDGE (Cell 300): 95.65%
+    - GRID5015 (Cell 314): 98.08%
+    
+    Parameters:
+    - degradation_curve: dict returned by get_degradation_curve()
+    - product: 'EDGE' or 'GRID5015'
+    
+    Returns:
+    - list of 21 SOH values (as fractions, e.g., 0.85 = 85%)
+    """
+    # Determine calendar degradation based on product
+    p = (product or '').strip().upper()
+    if p == 'EDGE':
+        calendar_degradation = 0.9565  # 95.65%
+    elif p == 'GRID5015':
+        calendar_degradation = 0.9808  # 98.08%
+    else:
+        calendar_degradation = 1.0  # fallback
+    
+    # Calculate SOH for each year
+    soh_list = []
+    for year in range(21):
+        deg_key = f'deg_{year}'
+        deg_val = degradation_curve.get(deg_key)
+        
+        if deg_val is None:
+            soh_list.append(None)
+        else:
+            soh = float(deg_val) * calendar_degradation
+            # Clamp to [0, 1] range
+            soh = max(0.0, min(1.0, soh))
+            soh_list.append(round(soh, 4))
+    
+    return soh_list
+
+
+def compute_yearly_dc_nameplate(
+    product: str,
+    model: str | None,
+    containers_list: list,
+    capacity_unit: str = 'kWh',
+) -> list:
+    """
+    Compute yearly DC Nameplate for years 0-20.
+    
+    Formula: DC_Nameplate[year] = 100% DOD Energy (kWh) × Containers_in_Service[year]
+    
+    Parameters:
+    - product: 'EDGE' or 'GRID5015'
+    - model: Model variant (e.g., '760kWh')
+    - containers_list: List of 21 container counts (one per year, allows for augmentation)
+    - capacity_unit: Output unit ('kWh' or 'MWh')
+    
+    Returns:
+    - list of 21 DC Nameplate values (one per year)
+    """
+    try:
+        # Get 100% DOD Energy from BESS.xlsx
+        specs = get_bess_specs_for(product, model)
+        energy_kwh = None
+        
+        # Try to find 100% DOD Energy
+        for key in ('100% DOD Energy (kWh)', '100%DOD Energy (kWh)', '100% DOD Energy', 'Energy (kWh)'):
+            if key in specs:
+                try:
+                    energy_kwh = float(str(specs[key]).replace(',', '').strip())
+                    break
+                except Exception:
+                    pass
+        
+        if energy_kwh is None or energy_kwh <= 0:
+            return [None] * 21
+        
+        # Calculate DC Nameplate for each year
+        dc_nameplate_list = []
+        for year in range(21):
+            # Get container count for this year (supports augmentation)
+            containers = containers_list[year] if year < len(containers_list) else containers_list[-1] if containers_list else 0
+            try:
+                containers = int(containers)
+            except:
+                containers = 0
+            
+            dc_nameplate = energy_kwh * containers
+            
+            # Convert to desired unit
+            if capacity_unit == 'MWh':
+                dc_nameplate = round(dc_nameplate / 1000.0, 2)
+            else:
+                dc_nameplate = round(dc_nameplate, 2)
+            
+            dc_nameplate_list.append(dc_nameplate)
+        
+        return dc_nameplate_list
+    
+    except Exception:
+        return [None] * 21
+
+
+def compute_yearly_dc_usable(
+    product: str,
+    model: str | None,
+    containers_list: list,
+    soh_list: list,
+    capacity_unit: str = 'kWh',
+    dod: float = 0.95,
+    discharge_rate: float = 0.5,
+) -> list:
+    """
+    Compute yearly DC Usable for years 0-20.
+    
+    Formula: DC_Usable[year] = 100% DOD Energy × Containers[year] × DOD × discharge_eff × SOH[year]
+    
+    Parameters:
+    - product: 'EDGE' or 'GRID5015'
+    - model: Model variant (e.g., '760kWh')
+    - containers_list: List of 21 container counts (one per year, allows for augmentation)
+    - soh_list: List of 21 SOH values (as fractions, e.g., 0.9565)
+    - capacity_unit: Output unit ('kWh' or 'MWh')
+    - dod: Depth of Discharge, default 95% (0.95)
+    - discharge_rate: C-rate value (e.g., 0.5), used to determine discharge efficiency
+    
+    Discharge Efficiency:
+    - 0.5C → 0.95 (95%)
+    - Other → 0.965 (96.5%)
+    
+    Returns:
+    - list of 21 DC Usable values (one per year)
+    """
+    try:
+        # Get 100% DOD Energy from BESS.xlsx
+        specs = get_bess_specs_for(product, model)
+        energy_kwh = None
+        
+        # Try to find 100% DOD Energy
+        for key in ('100% DOD Energy (kWh)', '100%DOD Energy (kWh)', '100% DOD Energy', 'Energy (kWh)'):
+            if key in specs:
+                try:
+                    energy_kwh = float(str(specs[key]).replace(',', '').strip())
+                    break
+                except Exception:
+                    pass
+        
+        if energy_kwh is None or energy_kwh <= 0:
+            return [None] * 21
+        
+        # Determine discharge efficiency based on C-rate
+        if discharge_rate is not None and discharge_rate <= 0.25:
+            discharge_eff = 0.965
+        elif discharge_rate is not None and discharge_rate <= 0.5:
+            discharge_eff = 0.95
+        else:
+            discharge_eff = 0.95
+        
+        # Calculate DC Usable for each year
+        dc_usable_list = []
+        for year in range(21):
+            # Get container count for this year (supports augmentation)
+            containers = containers_list[year] if year < len(containers_list) else containers_list[-1] if containers_list else 0
+            try:
+                containers = int(containers)
+            except:
+                containers = 0
+            
+            # Get SOH for this year
+            soh = soh_list[year] if year < len(soh_list) and soh_list[year] is not None else 1.0
+            
+            # Formula: energy × containers × DOD × discharge_eff × SOH
+            dc_usable = energy_kwh * containers * dod * discharge_eff * soh
+            
+            # Convert to desired unit
+            if capacity_unit == 'MWh':
+                dc_usable = round(dc_usable / 1000.0, 2)
+            else:
+                dc_usable = round(dc_usable, 2)
+            
+            dc_usable_list.append(dc_usable)
+        
+        return dc_usable_list
+    
+    except Exception:
+        return [None] * 21
+
+
+def compute_yearly_ac_usable(
+    product: str,
+    model: str | None,
+    containers_list: list,
+    soh_list: list,
+    capacity_unit: str = 'kWh',
+    dod: float = 0.95,
+    discharge_rate: float = 0.5,
+    ac_conversion: float = 0.9732,
+) -> list:
+    """
+    Compute yearly AC Usable for years 0-20.
+    
+    Formula: AC_Usable[year] = 100% DOD Energy × Containers[year] × DOD × discharge_eff × 0.9732 × SOH[year]
+    
+    Parameters:
+    - product: 'EDGE' or 'GRID5015'
+    - model: Model variant (e.g., '760kWh')
+    - containers_list: List of 21 container counts (one per year, allows for augmentation)
+    - soh_list: List of 21 SOH values (as fractions, e.g., 0.9565)
+    - capacity_unit: Output unit ('kWh' or 'MWh')
+    - dod: Depth of Discharge, default 95% (0.95)
+    - discharge_rate: C-rate value (e.g., 0.5), used to determine discharge efficiency
+    - ac_conversion: AC conversion efficiency, default 97.32% (0.9732)
+    
+    Discharge Efficiency:
+    - 0.5C → 0.95 (95%)
+    - Other → 0.965 (96.5%)
+    
+    Returns:
+    - list of 21 AC Usable values (one per year)
+    """
+    try:
+        # Get 100% DOD Energy from BESS.xlsx
+        specs = get_bess_specs_for(product, model)
+        energy_kwh = None
+        
+        # Try to find 100% DOD Energy
+        for key in ('100% DOD Energy (kWh)', '100%DOD Energy (kWh)', '100% DOD Energy', 'Energy (kWh)'):
+            if key in specs:
+                try:
+                    energy_kwh = float(str(specs[key]).replace(',', '').strip())
+                    break
+                except Exception:
+                    pass
+        
+        if energy_kwh is None or energy_kwh <= 0:
+            return [None] * 21
+        
+        # Determine discharge efficiency based on C-rate
+        if discharge_rate is not None and discharge_rate <= 0.25:
+            discharge_eff = 0.965
+        elif discharge_rate is not None and discharge_rate <= 0.5:
+            discharge_eff = 0.95
+        else:
+            discharge_eff = 0.95
+        
+        # Calculate AC Usable for each year
+        ac_usable_list = []
+        for year in range(21):
+            # Get container count for this year (supports augmentation)
+            containers = containers_list[year] if year < len(containers_list) else containers_list[-1] if containers_list else 0
+            try:
+                containers = int(containers)
+            except:
+                containers = 0
+            
+            # Get SOH for this year
+            soh = soh_list[year] if year < len(soh_list) and soh_list[year] is not None else 1.0
+            
+            # Formula: energy × containers × DOD × discharge_eff × ac_conversion × SOH
+            ac_usable = energy_kwh * containers * dod * discharge_eff * ac_conversion * soh
+            
+            # Convert to desired unit
+            if capacity_unit == 'MWh':
+                ac_usable = round(ac_usable / 1000.0, 2)
+            else:
+                ac_usable = round(ac_usable, 2)
+            
+            ac_usable_list.append(ac_usable)
+        
+        return ac_usable_list
+    
+    except Exception:
+        return [None] * 21

@@ -175,13 +175,30 @@ st.markdown(f"""
         font-size: 10px;
         padding: 2px 4px !important;
         white-space: nowrap;
+        text-align: center !important;
     }}
     .stDataFrame td {{
         font-size: 10px;
         padding: 2px 4px !important;
+        text-align: center !important;
     }}
     .stDataFrame [data-testid="stDataFrame"] {{
         height: auto !important;
+    }}
+    /* 强制表格单元格内容居中 - 更强的选择器 */
+    [data-testid="stDataFrame"] table tbody tr td {{
+        text-align: center !important;
+    }}
+    [data-testid="stDataFrame"] table thead tr th {{
+        text-align: center !important;
+    }}
+    [data-testid="stDataFrame"] table tbody tr td div {{
+        text-align: center !important;
+        justify-content: center !important;
+    }}
+    [data-testid="stDataFrame"] table thead tr th div {{
+        text-align: center !important;
+        justify-content: center !important;
     }}
 </style>
 """, unsafe_allow_html=True)
@@ -326,7 +343,15 @@ with col_right:
         st.markdown('<p style="margin-bottom: 0.25rem; font-size: 14px; font-weight: 400;">Discharge Rate:</p>', unsafe_allow_html=True)
         st.markdown(f'<div style="background-color: #f0f2f6; padding: 0.5rem 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem; font-size: 16px; color: #31333F;">{c_rate_display if c_rate_display else "&nbsp;"}</div>', unsafe_allow_html=True)
         
-        cycle_num = st.text_input("Cycle Number:", value=st.session_state.data['cycle'], key='cycle')
+        cycle_num = st.number_input(
+            "Cycles per Year:",
+            min_value=0,
+            max_value=10000,
+            value=int(st.session_state.data['cycle']) if st.session_state.data['cycle'] and str(st.session_state.data['cycle']).strip() else 0,
+            step=1,
+            format="%d",
+            key='cycle'
+        )
     
     # ===== Lifecycle =====
     with st.container():
@@ -441,7 +466,7 @@ if st.session_state.show_pcs_section:
                     cur_capacity_unit = st.session_state.get('capacity_unit_select', 'kWh')
                     cur_power_kw = to_kw(cur_power if cur_power and cur_power > 0 else None, cur_power_unit)
                     # Ensure consistent snake_case variables only
-                    cur_capacity_kwh = to_kwh(cur_capacity if cur_capacity and cur_capacity > 0 else None, cur_capacity_unit)
+                    cur_capacity_kwh = to_kwh(cur_capacity if curCapacity and curCapacity > 0 else None, cur_capacity_unit)
                     cur_c_rate = calculate_c_rate(cur_power_kw, cur_capacity_kwh)
                     st.session_state.data['power_kw'] = cur_power_kw
                     st.session_state.data['capacity_kwh'] = cur_capacity_kwh
@@ -788,33 +813,353 @@ if st.session_state.show_results_section:
     
     st.markdown("<br>", unsafe_allow_html=True)
     
+    # 显示 Cycle Degradation 数据框
+    try:
+        from algorithm import get_degradation_curve, compute_soh_percent, compute_yearly_dc_nameplate, compute_yearly_dc_usable, compute_yearly_ac_usable
+        
+        # 获取输入参数
+        input_product = st.session_state.data.get('product', 'EDGE')
+        input_model = st.session_state.data.get('edge_model', '760kWh')
+        input_cycles = st.session_state.data.get('cycle', 365)
+        input_discharge = current_c_rate if current_c_rate else 0.5
+        input_capacity_unit = st.session_state.data.get('capacity_unit', 'kWh')
+        
+        # 确保 cycles 是整数
+        try:
+            input_cycles = int(input_cycles) if input_cycles else 365
+        except:
+            input_cycles = 365
+        
+        # 读取退化曲线
+        deg_curve = get_degradation_curve(
+            product=input_product,
+            cycles_per_year=input_cycles,
+            discharge_rate=input_discharge,
+            debug=False  # 关闭调试
+        )
+        
+        # 计算 SOH%
+        soh_list = compute_soh_percent(
+            degradation_curve=deg_curve,
+            product=input_product
+        )
+        
+        # 创建容器数量列表（0-20年）
+        # 目前使用固定值，未来可以根据 Augmentation 动态调整
+        containers_list = [proposed_bess] * 21
+        
+        # 计算 DC Nameplate (0-20年)
+        dc_nameplate_list = compute_yearly_dc_nameplate(
+            product=input_product,
+            model=input_model,
+            containers_list=containers_list,
+            capacity_unit=input_capacity_unit
+        )
+        
+        # 计算 DC Usable (0-20年)
+        dc_usable_list = compute_yearly_dc_usable(
+            product=input_product,
+            model=input_model,
+            containers_list=containers_list,
+            soh_list=soh_list,
+            capacity_unit=input_capacity_unit,
+            dod=0.95,  # 固定 95%
+            discharge_rate=input_discharge
+        )
+        
+        # 计算 AC Usable (0-20年)
+        ac_usable_list = compute_yearly_ac_usable(
+            product=input_product,
+            model=input_model,
+            containers_list=containers_list,
+            soh_list=soh_list,
+            capacity_unit=input_capacity_unit,
+            dod=0.95,  # 固定 95%
+            discharge_rate=input_discharge,
+            ac_conversion=0.9732  # 97.32%
+        )
+        
+        # Debug: 显示前3年的 SOH% 计算
+        if soh_list and len(soh_list) >= 3:
+            st.info(f"📊 SOH% Preview: Year 0 = {soh_list[0]*100:.2f}%, Year 1 = {soh_list[1]*100:.2f}%, Year 2 = {soh_list[2]*100:.2f}%")
+        
+        # 创建显示框 - 类似图片的紧凑横向布局
+        filter_info = deg_curve.get('filter_info', {})
+        
+        # 获取 DOD 值
+        try:
+            # 尝试从 BESS specs 获取 DOD
+            specs = get_bess_specs_for(input_product, st.session_state.data.get('edge_model'))
+            dod_value = specs.get('DOD', '95%')
+            if not isinstance(dod_value, str):
+                dod_value = f"{float(dod_value)*100:.0f}%"
+        except:
+            dod_value = "95%"
+        
+        # 构建退化因子的百分比字符串
+        deg_percentages = []
+        for year in range(21):
+            val = deg_curve.get(f'deg_{year}')
+            if val is not None:
+                deg_percentages.append(f"{val*100:.2f}%")
+            else:
+                deg_percentages.append("N/A")
+        
+        # 生成表格 - 使用和 Capacity Analysis Table 相同的样式
+        html_output = f"""
+        <style>
+            .deg-table {{
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 13px;
+                margin-bottom: 20px;
+            }}
+            .deg-table th, .deg-table td {{
+                border: 1px solid #ddd;
+                padding: 4px 6px;
+                text-align: center !important;
+            }}
+            .deg-table th {{
+                background-color: #f0f2f6;
+                font-weight: 600;
+                color: #31333F;
+            }}
+            .deg-table td {{
+                background-color: #ffffff;
+            }}
+            .deg-table tr:nth-child(even) {{
+                background-color: #f9f9f9;
+            }}
+            .deg-table tr:hover {{
+                background-color: #f5f5f5;
+            }}
+            .deg-table-container {{
+                overflow-x: auto;
+                margin-bottom: 20px;
+            }}
+        </style>
+        <div class="group-title">Cycling Degradation Curve</div>
+        <div class="deg-table-container">
+            <table class="deg-table">
+                <thead>
+                    <tr>
+                        <th>Cell (Ah)</th>
+                        <th>Cycles/Year</th>
+                        <th>Temperature (°C)</th>
+                        <th>Discharge rate</th>
+                        <th>DOD</th>
+                        <th>0 yr</th>
+                        <th>1 yr</th>
+                        <th>2 yr</th>
+                        <th>3 yr</th>
+                        <th>4 yr</th>
+                        <th>5 yr</th>
+                        <th>6 yr</th>
+                        <th>7 yr</th>
+                        <th>8 yr</th>
+                        <th>9 yr</th>
+                        <th>10 yr</th>
+                        <th>11 yr</th>
+                        <th>12 yr</th>
+                        <th>13 yr</th>
+                        <th>14 yr</th>
+                        <th>15 yr</th>
+                        <th>16 yr</th>
+                        <th>17 yr</th>
+                        <th>18 yr</th>
+                        <th>19 yr</th>
+                        <th>20 yr</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>{filter_info.get('target_cell')}</td>
+                        <td>{filter_info.get('matched_cycle')}</td>
+                        <td>25</td>
+                        <td>{filter_info.get('matched_prate'):.2f}</td>
+                        <td>{dod_value}</td>
+                        {''.join([f'<td>{pct}</td>' for pct in deg_percentages])}
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        """
+        
+        st.markdown(html_output, unsafe_allow_html=True)
+        
+    except Exception as e:
+        st.warning(f"⚠️ Unable to load degradation curve: {str(e)}")
+    
     # 创建表格数据
     import pandas as pd
     
-    # 表格列名（9列）
-    columns = ["End of Year", "Containers in Service", "PCS in Service", "SOH (% of Original Capacity)", 
-               "DC Nameplate", "DC Usable", "AC Usable @ MVT", "Min. Required", "Δ"]
+    # 获取选中配置的 PCS 数量
+    selected_pcs_count = None
+    if st.session_state.data.get('selected_pcs') and pcs_options:
+        selected_label = st.session_state.data['selected_pcs']
+        idx = 0 if selected_label == 'Configuration A' else 1
+        opt = pcs_options[idx] if len(pcs_options) > idx else None
+        if opt:
+            tag = infer_tag_from_image(opt.get('image', ''))
+            metrics = compute_metrics_for_config(tag)
+            selected_pcs_count = metrics.get('pcs_count_str', '-')
     
-    # 创建示例数据（20行：1-20）
+    # 表格列名（9列）- 单位同步第一页选择
+    capacity_unit_display = st.session_state.data.get('capacity_unit', 'kWh')
+    columns = ["End of Year", "Containers in Service", "PCS in Service", "SOH (% of Original Capacity)", 
+               f"DC Nameplate ({capacity_unit_display})", f"DC Usable ({capacity_unit_display})", 
+               f"AC Usable @ MVT ({capacity_unit_display})", f"Min. Required ({capacity_unit_display})", 
+               f"Δ ({capacity_unit_display})"]
+    
+    # 获取第一页填写的 Min. Required（容量需求）
+    min_required_value = st.session_state.data.get('capacity')
+    min_required_unit = st.session_state.data.get('capacity_unit', 'kWh')
+    if min_required_value is not None:
+        try:
+            min_required_value = float(min_required_value)
+            if min_required_unit == 'MWh':
+                min_required_value = round(min_required_value, 2)
+            else:
+                min_required_value = round(min_required_value, 2)
+        except:
+            min_required_value = '-'
+    else:
+        min_required_value = '-'
+
+    # 创建表格数据（21行：0-20）
     data = []
-    for year in range(1, 21):
+    for year in range(0, 21):
+        # 获取 SOH% 值（如果存在）
+        soh_value = ""
+        try:
+            if 'soh_list' in locals() and soh_list and year < len(soh_list):
+                soh_val = soh_list[year]
+                if soh_val is not None:
+                    soh_value = f"{soh_val * 100:.2f}%"
+        except:
+            pass
+        
+        # 获取 DC Nameplate 值
+        dc_nameplate_value = ""
+        try:
+            if 'dc_nameplate_list' in locals() and dc_nameplate_list and year < len(dc_nameplate_list):
+                dc_val = dc_nameplate_list[year]
+                if dc_val is not None:
+                    dc_nameplate_value = f"{dc_val:,.2f}"
+        except:
+            pass
+        
+        # 获取 DC Usable 值
+        dc_usable_value = ""
+        try:
+            if 'dc_usable_list' in locals() and dc_usable_list and year < len(dc_usable_list):
+                dc_val = dc_usable_list[year]
+                if dc_val is not None:
+                    dc_usable_value = f"{dc_val:,.2f}"
+        except:
+            pass
+        
+        # 获取 AC Usable 值
+        ac_usable_value = ""
+        try:
+            if 'ac_usable_list' in locals() and ac_usable_list and year < len(ac_usable_list):
+                ac_val = ac_usable_list[year]
+                if ac_val is not None:
+                    ac_usable_value = f"{ac_val:,.2f}"
+        except:
+            pass
+        
+        # 获取 solution 类型（AC 或 DC）
+        solution_type = st.session_state.data.get('edge_solution', '').strip().upper()
+        
+        # 计算 Δ (Delta)
+        delta_value = ""
+        try:
+            if min_required_value != '-' and min_required_value is not None:
+                min_val = float(min_required_value)
+                if solution_type == 'AC':
+                    # 用 AC Usable - Min. Required
+                    if 'ac_usable_list' in locals() and ac_usable_list and year < len(ac_usable_list):
+                        ac_val = ac_usable_list[year]
+                        if ac_val is not None:
+                            delta_value = f"{ac_val - min_val:,.2f}"
+                else:
+                    # 用 DC Usable - Min. Required
+                    if 'dc_usable_list' in locals() and dc_usable_list and year < len(dc_usable_list):
+                        dc_val = dc_usable_list[year]
+                        if dc_val is not None:
+                            delta_value = f"{dc_val - min_val:,.2f}"
+        except:
+            delta_value = ""
         data.append({
-            "End of Year": year,
-            "Containers in Service": "",
-            "PCS in Service": "",
-            "SOH (% of Original Capacity)": "",
-            "DC Nameplate": "",
-            "DC Usable": "",
-            "AC Usable @ MVT": "",
-            "Min. Required": "",
-            "Δ": ""
+            columns[0]: str(year),  # End of Year
+            columns[1]: str(proposed_bess),  # Containers in Service
+            columns[2]: selected_pcs_count if selected_pcs_count else "-",  # PCS in Service
+            columns[3]: soh_value,  # SOH (% of Original Capacity)
+            columns[4]: dc_nameplate_value,  # DC Nameplate (unit)
+            columns[5]: dc_usable_value,  # DC Usable (unit)
+            columns[6]: ac_usable_value,  # AC Usable @ MVT (unit)
+            columns[7]: min_required_value,  # Min. Required (unit)
+            columns[8]: delta_value  # Δ (unit)
         })
     
     df = pd.DataFrame(data)
     
-    # 显示表格 - 精确调整高度，刚好显示20行数据
+    # 使用 HTML 表格替代 st.dataframe，完全控制样式
     st.markdown('<div class="group-title">Capacity Analysis Table</div>', unsafe_allow_html=True)
-    st.dataframe(df, use_container_width=True, hide_index=True, height=738)
+    
+    # 生成 HTML 表格
+    html_table = """
+    <style>
+        .custom-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        .custom-table th, .custom-table td {
+            border: 1px solid #ddd;
+            padding: 6px 8px;
+            text-align: center !important;
+        }
+        .custom-table th {
+            background-color: #f0f2f6;
+            font-weight: 600;
+            color: #31333F;
+        }
+        .custom-table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .custom-table tr:hover {
+            background-color: #f5f5f5;
+        }
+        .table-container {
+            max-height: 820px;
+            overflow-y: auto;
+            overflow-x: auto;
+        }
+    </style>
+    <div class="table-container">
+        <table class="custom-table">
+            <thead>
+                <tr>
+    """
+    
+    # 添加表头
+    for col in df.columns:
+        html_table += f"<th>{col}</th>"
+    html_table += "</tr></thead><tbody>"
+    
+    # 添加数据行
+    for _, row in df.iterrows():
+        html_table += "<tr>"
+        for val in row:
+            html_table += f"<td>{val if val else '-'}</td>"
+        html_table += "</tr>"
+    
+    html_table += "</tbody></table></div>"
+    
+    st.markdown(html_table, unsafe_allow_html=True)
     
     st.markdown("<br>", unsafe_allow_html=True)
     
