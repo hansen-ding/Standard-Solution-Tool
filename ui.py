@@ -347,7 +347,7 @@ with col_right:
             "Cycles per Year:",
             min_value=0,
             max_value=10000,
-            value=int(st.session_state.data['cycle']) if st.session_state.data['cycle'] and str(st.session_state.data['cycle']).strip() else 0,
+            value=int(st.session_state.data['cycle']) if st.session_state.data['cycle'] not in (None, '', 0) else None,
             step=1,
             format="%d",
             key='cycle'
@@ -466,7 +466,7 @@ if st.session_state.show_pcs_section:
                     cur_capacity_unit = st.session_state.get('capacity_unit_select', 'kWh')
                     cur_power_kw = to_kw(cur_power if cur_power and cur_power > 0 else None, cur_power_unit)
                     # Ensure consistent snake_case variables only
-                    cur_capacity_kwh = to_kwh(cur_capacity if curCapacity and curCapacity > 0 else None, cur_capacity_unit)
+                    cur_capacity_kwh = to_kwh(cur_capacity if cur_capacity and cur_capacity > 0 else None, cur_capacity_unit)
                     cur_c_rate = calculate_c_rate(cur_power_kw, cur_capacity_kwh)
                     st.session_state.data['power_kw'] = cur_power_kw
                     st.session_state.data['capacity_kwh'] = cur_capacity_kwh
@@ -496,6 +496,7 @@ if st.session_state.show_pcs_section:
                 product=current_product,
                 model=current_model,
                 augmentation_mode=current_augmentation,
+                solution_type=current_solution, # 传递 solution_type
             )
         except Exception:
             proposed_bess = 0
@@ -879,10 +880,6 @@ if st.session_state.show_results_section:
             ac_conversion=0.9732  # 97.32%
         )
         
-        # Debug: 显示前3年的 SOH% 计算
-        if soh_list and len(soh_list) >= 3:
-            st.info(f"📊 SOH% Preview: Year 0 = {soh_list[0]*100:.2f}%, Year 1 = {soh_list[1]*100:.2f}%, Year 2 = {soh_list[2]*100:.2f}%")
-        
         # 创建显示框 - 类似图片的紧凑横向布局
         filter_info = deg_curve.get('filter_info', {})
         
@@ -1165,13 +1162,25 @@ if st.session_state.show_results_section:
     
     # 绘图区域
     st.markdown('<div class="group-title">Performance Chart</div>', unsafe_allow_html=True)
-    
-    # 示例：使用 Streamlit 的 line_chart
+
+    # 生成两条线：Min. Required（常量线）和 Usable（DC 或 AC）
     import numpy as np
-    chart_data = pd.DataFrame(
-        np.random.randn(20, 3),
-        columns=['DC Usable', 'AC Usable', 'Min. Required']
-    )
+    chart_years = list(range(21))
+    # 选用 solution type
+    solution_type = st.session_state.data.get('edge_solution', '').strip().upper()
+    if solution_type == 'AC':
+        usable_curve = ac_usable_list if 'ac_usable_list' in locals() else []
+        usable_label = 'AC Usable'
+    else:
+        usable_curve = dc_usable_list if 'dc_usable_list' in locals() else []
+        usable_label = 'DC Usable'
+    # Min. Required 常量线
+    min_required_curve = [min_required_value] * 21 if min_required_value not in ('-', None) else [0] * 21
+    # 生成 DataFrame
+    chart_data = pd.DataFrame({
+        usable_label: usable_curve,
+        'Min. Required': min_required_curve
+    }, index=chart_years)
     st.line_chart(chart_data)
     
     # 添加 Export Configuration 按钮到右下角

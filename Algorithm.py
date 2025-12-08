@@ -326,26 +326,18 @@ def compute_proposed_bess_count(
     product: str,
     model: str | None,
     augmentation_mode: str,
+    solution_type: str = 'DC',  # 直接用solution_type判定AC/DC
     bess_specs_sheet: int | str = 0,
 ) -> int:
     """
     Compute proposed number of BESS containers.
-
-    Rules:
-    - If augmentation_mode in ['N/A', 'Augmentation'] -> direct sizing by single product capacity.
-    - If augmentation_mode == 'Overbuild' -> placeholder branch (to be implemented upon your rule).
-
-    Inputs:
-    - capacity_required_kwh: target capacity (kWh) to meet.
-    - product/model: used to fetch single product capacity from data/BESS.xlsx.
-    - augmentation_mode: "", "N/A", "Augmentation", or "Overbuild".
-
-    Returns integer count (ceil), minimum 0.
+    新算法：根据 solution_type（AC/DC），用需求总量除以单柜 usable capacity，向上取整。
+    - DC: usable = 100% DOD Energy × DOD × discharge_eff × calendar_degradation
+    - AC: usable = 100% DOD Energy × DOD × discharge_eff × ac_conversion × calendar_degradation
     """
     try:
         specs = get_bess_specs_for(product, model, sheet=bess_specs_sheet)
-        # Attempt to locate single product energy capacity from specs.
-        # Prefer keys commonly named like '100% DOD Energy (kWh)'; otherwise try a few variants.
+        # 获取单柜100% DOD能量
         energy_kwh = None
         for key in (
             '100% DOD Energy (kWh)',
@@ -359,31 +351,64 @@ def compute_proposed_bess_count(
                     break
                 except Exception:
                     pass
-        if energy_kwh is None:
-            # Fallback: try first numeric value in the column
-            for v in specs.values():
-                try:
-                    energy_kwh = float(str(v).replace(',', '').strip())
-                    break
-                except Exception:
-                    continue
         if energy_kwh is None or energy_kwh <= 0:
             return 0
 
-        mode = (augmentation_mode or '').strip()
-        if mode in ('', 'N/A', 'Augmentation'):
-            from math import ceil
-            return max(0, int(ceil((capacity_required_kwh or 0.0) / energy_kwh)))
-        elif mode == 'Overbuild':
-            # TODO: Overbuild sizing rule to be provided; placeholder returns direct sizing for now.
-            from math import ceil
-            return max(0, int(ceil((capacity_required_kwh or 0.0) / energy_kwh)))
+        print(f"[DEBUG] 100% DOD Energy (kWh): {energy_kwh}")
+
+        # ---------- 新增：根据 product 计算 calendar_degradation ----------
+        p = (product or '').strip().upper()
+        if p == 'EDGE':
+            calendar_degradation = 0.9565
+        elif p == 'GRID5015':
+            calendar_degradation = 0.9808
         else:
-            # Unknown mode -> default direct sizing
-            from math import ceil
-            return max(0, int(ceil((capacity_required_kwh or 0.0) / energy_kwh)))
+            calendar_degradation = 1.0  # 不认识的产品先不衰减
+        # ------------------------------------------------------------------
+
+        # 默认参数
+        dod = 0.95
+        discharge_rate = 0.5  # 可根据实际传参
+        ac_conversion = 0.9732
+
+        # 放电效率
+        if discharge_rate <= 0.25:
+            discharge_eff = 0.965
+        elif discharge_rate <= 0.5:
+            discharge_eff = 0.95
+        else:
+            discharge_eff = 0.95
+
+        # 直接用solution_type判定AC/DC
+        solution_mode = (solution_type or '').strip().upper()
+        if solution_mode == 'AC':
+            usable = (
+                energy_kwh
+                * dod
+                * discharge_eff
+                * ac_conversion
+                * calendar_degradation   # ✅ AC情形也乘日历衰减
+            )
+        else:
+            usable = (
+                energy_kwh
+                * dod
+                * discharge_eff
+                * calendar_degradation   # ✅ DC情形乘日历衰减
+            )
+
+        print('capacity_required_kwh:', capacity_required_kwh)
+        print('usable:', usable)
+        print('solution_type:', solution_type)
+
+        if usable <= 0:
+            return 0
+
+        from math import ceil
+        return max(0, int(ceil((capacity_required_kwh or 0.0) / usable)))
     except Exception:
         return 0
+
 
 
 def compute_confluence_cabinet_count(product: str, model: str | None, option_id: str, proposed_bess: int) -> str:
