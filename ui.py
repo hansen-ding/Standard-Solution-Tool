@@ -467,7 +467,7 @@ if st.session_state.show_pcs_section:
                     cur_capacity_unit = st.session_state.get('capacity_unit_select', 'kWh')
                     cur_power_kw = to_kw(cur_power if cur_power and cur_power > 0 else None, cur_power_unit)
                     # Ensure consistent snake_case variables only
-                    cur_capacity_kwh = to_kwh(cur_capacity if curCapacity and curCapacity > 0 else None, curCapacity_unit)
+                    cur_capacity_kwh = to_kwh(cur_capacity if cur_capacity and cur_capacity > 0 else None, cur_capacity_unit)
                     cur_c_rate = calculate_c_rate(cur_power_kw, cur_capacity_kwh)
                     st.session_state.data['power_kw'] = cur_power_kw
                     st.session_state.data['capacity_kwh'] = cur_capacity_kwh
