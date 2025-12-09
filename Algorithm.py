@@ -354,8 +354,6 @@ def compute_proposed_bess_count(
         if energy_kwh is None or energy_kwh <= 0:
             return 0
 
-        print(f"[DEBUG] 100% DOD Energy (kWh): {energy_kwh}")
-
         # ---------- 新增：根据 product 计算 calendar_degradation ----------
         p = (product or '').strip().upper()
         if p == 'EDGE':
@@ -396,10 +394,6 @@ def compute_proposed_bess_count(
                 * discharge_eff
                 * calendar_degradation   # ✅ DC情形乘日历衰减
             )
-
-        print('capacity_required_kwh:', capacity_required_kwh)
-        print('usable:', usable)
-        print('solution_type:', solution_type)
 
         if usable <= 0:
             return 0

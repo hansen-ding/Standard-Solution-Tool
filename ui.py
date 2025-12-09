@@ -12,6 +12,7 @@ from datetime import datetime
 import io
 from PIL import Image
 import base64
+import matplotlib.pyplot as plt
 
 # 主题颜色
 THEME_RGB = (234, 85, 32)
@@ -466,7 +467,7 @@ if st.session_state.show_pcs_section:
                     cur_capacity_unit = st.session_state.get('capacity_unit_select', 'kWh')
                     cur_power_kw = to_kw(cur_power if cur_power and cur_power > 0 else None, cur_power_unit)
                     # Ensure consistent snake_case variables only
-                    cur_capacity_kwh = to_kwh(cur_capacity if cur_capacity and cur_capacity > 0 else None, cur_capacity_unit)
+                    cur_capacity_kwh = to_kwh(cur_capacity if curCapacity and curCapacity > 0 else None, curCapacity_unit)
                     cur_c_rate = calculate_c_rate(cur_power_kw, cur_capacity_kwh)
                     st.session_state.data['power_kw'] = cur_power_kw
                     st.session_state.data['capacity_kwh'] = cur_capacity_kwh
@@ -1109,14 +1110,14 @@ if st.session_state.show_results_section:
     html_table = """
     <style>
         .custom-table {
-            width: 100%;
+            width: 100%;  /* 表格宽度设置为 100% */
             border-collapse: collapse;
-            font-size: 14px;
+            font-size: 14px;  /* 恢复字体大小 */
             margin-top: 10px;
         }
         .custom-table th, .custom-table td {
             border: 1px solid #ddd;
-            padding: 6px 8px;
+            padding: 6px 8px;  /* 恢复单元格间距 */
             text-align: center !important;
         }
         .custom-table th {
@@ -1131,9 +1132,8 @@ if st.session_state.show_results_section:
             background-color: #f5f5f5;
         }
         .table-container {
-            max-height: 820px;
-            overflow-y: auto;
-            overflow-x: auto;
+            width: 100%;  /* 容器宽度设置为 100% */
+            overflow-x: auto;  /* 添加水平滚动条以适应屏幕 */
         }
     </style>
     <div class="table-container">
@@ -1161,27 +1161,39 @@ if st.session_state.show_results_section:
     st.markdown("<br>", unsafe_allow_html=True)
     
     # 绘图区域
-    st.markdown('<div class="group-title">Performance Chart</div>', unsafe_allow_html=True)
+    # 使用 st.container() 确保图表占据整个可用宽度
+    with st.container(): 
+        st.markdown('<div class="group-title">Performance Chart</div>', unsafe_allow_html=True)
 
-    # 生成两条线：Min. Required（常量线）和 Usable（DC 或 AC）
-    import numpy as np
-    chart_years = list(range(21))
-    # 选用 solution type
-    solution_type = st.session_state.data.get('edge_solution', '').strip().upper()
-    if solution_type == 'AC':
-        usable_curve = ac_usable_list if 'ac_usable_list' in locals() else []
-        usable_label = 'AC Usable'
-    else:
-        usable_curve = dc_usable_list if 'dc_usable_list' in locals() else []
-        usable_label = 'DC Usable'
-    # Min. Required 常量线
-    min_required_curve = [min_required_value] * 21 if min_required_value not in ('-', None) else [0] * 21
-    # 生成 DataFrame
-    chart_data = pd.DataFrame({
-        usable_label: usable_curve,
-        'Min. Required': min_required_curve
-    }, index=chart_years)
-    st.line_chart(chart_data)
+        # 生成两条线：Min. Required（常量线）和 Usable（DC 或 AC）
+        chart_years = list(range(21))
+        solution_type = st.session_state.data.get('edge_solution', '').strip().upper()
+        if solution_type == 'AC':
+            usable_curve = ac_usable_list if 'ac_usable_list' in locals() else []
+            usable_label = 'AC Usable'
+        else:
+            usable_curve = dc_usable_list if 'dc_usable_list' in locals() else []
+            usable_label = 'DC Usable'
+        min_required_curve = [min_required_value] * 21 if min_required_value not in ('-', None) else [0] * 21
+
+        # 使用 matplotlib 绘制图表
+        fig, ax = plt.subplots(figsize=(20, 6))  
+        ax.plot(chart_years, usable_curve, label=usable_label)
+        ax.fill_between(chart_years, usable_curve, alpha=0.2)
+        ax.plot(chart_years, min_required_curve, label='Min. Required', linestyle='-', color='red')
+        ax.set_xlabel('Year', fontsize=16)
+        ax.set_ylabel('Capacity', fontsize=16)
+        ax.tick_params(axis='both', which='major', labelsize=14)
+        max_capacity = max(max(usable_curve, default=0), max(min_required_curve, default=0))
+        ax.set_ylim(bottom=0, top=max_capacity * 1.5)
+        ax.set_xlim(left=0, right=20)
+        ax.set_xticks(chart_years)
+        ax.legend(fontsize=14)
+        ax.grid(True, linestyle='--', alpha=0.6)
+        fig.tight_layout()
+
+    # 在 Streamlit 中显示图表
+    st.pyplot(fig, use_container_width=True)
     
     # 添加 Export Configuration 按钮到右下角
     st.markdown("<br>", unsafe_allow_html=True)
