@@ -903,7 +903,7 @@ if st.session_state.show_results_section:
             else:
                 deg_percentages.append("N/A")
         
-        # 生成表格 - 使用和 Capacity Analysis Table 相同的样式
+        # Adjust the table style to make it responsive and adapt to the screen width
         html_output = f"""
         <style>
             .deg-table {{
@@ -911,6 +911,7 @@ if st.session_state.show_results_section:
                 border-collapse: collapse;
                 font-size: 13px;
                 margin-bottom: 20px;
+                table-layout: auto; /* Allow columns to adjust width automatically */
             }}
             .deg-table th, .deg-table td {{
                 border: 1px solid #ddd;
@@ -932,7 +933,8 @@ if st.session_state.show_results_section:
                 background-color: #f5f5f5;
             }}
             .deg-table-container {{
-                overflow-x: auto;
+                width: 100%; /* Ensure the container takes full width */
+                overflow-x: auto; /* Add horizontal scroll for smaller screens */
                 margin-bottom: 20px;
             }}
         </style>
