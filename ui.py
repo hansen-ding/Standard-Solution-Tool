@@ -113,9 +113,13 @@ st.markdown(f"""
     }}
     
     /* 隐藏 "Press Enter to apply" 提示 */
-    .stTextInput > div > div > input::placeholder,
     .stNumberInput > div > div > input::placeholder {{
         color: transparent;
+    }}
+    /* 显示 delivery 和 cod 输入框的 placeholder */
+    .stTextInput > div > div > input::placeholder {{
+        color: #999;
+        opacity: 0.7;
     }}
     .stTextInput [data-testid="InputInstructions"],
     .stNumberInput [data-testid="InputInstructions"] {{
@@ -253,8 +257,74 @@ with col_left:
         
         customer = st.text_input("Customer Name:", value=st.session_state.data['customer'], key='customer')
         project = st.text_input("Project Name:", value=st.session_state.data['project'], key='project')
-        usecase = st.text_input("Use Case:", value=st.session_state.data['usecase'], key='usecase')
-        life_stage = st.text_input("Life Stage (BOL/EOL):", value=st.session_state.data['life_stage'], key='life_stage')
+        
+        # Use Case dropdown list
+        usecase_options = [
+            "",
+            "Peak Shaving",
+            "Load Shifting",
+            "Energy Arbitrage",
+            "TOU Optimization",
+            "Frequency Regulation",
+            "Spinning Reserve",
+            "Backup Power / UPS",
+            "Black Start",
+            "Renewable Integration",
+            "PV Smoothing",
+            "Renewable Firming",
+            "EV Charging Support",
+            "Microgrid / Island Operation",
+            "Demand Response",
+            "Power Quality Improvement",
+            "Voltage Control / Reactive Power Support",
+            "Congestion Management",
+            "T&D Upgrade Deferral",
+            "Long-duration Energy Storage",
+            "Virtual Power Plant (VPP)",
+            "Other"
+        ]
+        
+        # 判断当前值是否在选项中，如果不在且不为空，说明是自定义值
+        current_usecase = st.session_state.data.get('usecase', '')
+        if current_usecase and current_usecase not in usecase_options:
+            # 保存自定义值到 session state
+            if 'usecase_custom' not in st.session_state.data:
+                st.session_state.data['usecase_custom'] = current_usecase
+            usecase_select = "Other"
+        else:
+            usecase_select = current_usecase
+        
+        usecase = st.selectbox(
+            "Use Case:",
+            usecase_options,
+            index=usecase_options.index(usecase_select) if usecase_select in usecase_options else 0,
+            key='usecase_select'
+        )
+        
+        # 如果选择了 "Other"，显示文本输入框
+        if usecase == "Other":
+            usecase_custom = st.text_input(
+                "Please specify:",
+                value=st.session_state.data.get('usecase_custom', ''),
+                key='usecase_custom_input',
+                placeholder="Enter custom use case"
+            )
+            # 使用自定义值作为最终的 usecase
+            final_usecase = usecase_custom if usecase_custom else "Other"
+        else:
+            final_usecase = usecase
+            # 清除自定义值
+            if 'usecase_custom' in st.session_state.data:
+                st.session_state.data['usecase_custom'] = ''
+        
+        # Life Stage dropdown
+        life_stage_options = ["", "BOL", "EOL"]
+        life_stage = st.selectbox(
+            "Life Stage:",
+            life_stage_options,
+            index=life_stage_options.index(st.session_state.data['life_stage']) if st.session_state.data['life_stage'] in life_stage_options else 0,
+            key='life_stage'
+        )
         
         # Location with fetch button
         location_col1, location_col2 = st.columns([0.82, 0.18])
@@ -353,13 +423,34 @@ with col_right:
             format="%d",
             key='cycle'
         )
+        
+        # Auto-save changes to session state when on results page
+        if st.session_state.show_results_section:
+            st.session_state.data['power'] = power if power and power > 0 else None
+            st.session_state.data['power_unit'] = power_unit
+            st.session_state.data['capacity'] = capacity if capacity and capacity > 0 else None
+            st.session_state.data['capacity_unit'] = capacity_unit
+            st.session_state.data['power_kw'] = power_kw
+            st.session_state.data['capacity_kwh'] = capacity_kwh
+            st.session_state.data['discharge'] = c_rate_display
+            st.session_state.data['cycle'] = cycle_num
     
     # ===== Lifecycle =====
     with st.container():
         st.markdown('<div class="group-title">Lifecycle</div>', unsafe_allow_html=True)
         
-        delivery = st.text_input("Delivery Date:", value=st.session_state.data['delivery'], key='delivery')
-        cod = st.text_input("COD:", value=st.session_state.data['cod'], key='cod')
+        delivery = st.text_input(
+            "Delivery Date:", 
+            value=st.session_state.data['delivery'], 
+            key='delivery',
+            placeholder="e.g. Q1 2049 / Jan 2049"
+        )
+        cod = st.text_input(
+            "COD:", 
+            value=st.session_state.data['cod'], 
+            key='cod',
+            placeholder="e.g. Q4 2077 / Dec 2077"
+        )
         augmentation = st.selectbox(
             "Augmentation & Overbuild:",
             ["", "N/A", "Augmentation", "Overbuild"],
@@ -390,7 +481,7 @@ if not st.session_state.show_pcs_section:
                 st.session_state.data.update({
                     'customer': customer,
                     'project': project,
-                    'usecase': usecase,
+                    'usecase': final_usecase,
                     'life_stage': life_stage,
                     'location': location,
                     'power': power if power and power > 0 else None,
@@ -466,11 +557,14 @@ if st.session_state.show_pcs_section:
                     cur_capacity = st.session_state.get('capacity_input', None)
                     cur_capacity_unit = st.session_state.get('capacity_unit_select', 'kWh')
                     cur_power_kw = to_kw(cur_power if cur_power and cur_power > 0 else None, cur_power_unit)
-                    # Ensure consistent snake_case variables only
                     cur_capacity_kwh = to_kwh(cur_capacity if cur_capacity and cur_capacity > 0 else None, cur_capacity_unit)
                     cur_c_rate = calculate_c_rate(cur_power_kw, cur_capacity_kwh)
                     st.session_state.data['power_kw'] = cur_power_kw
                     st.session_state.data['capacity_kwh'] = cur_capacity_kwh
+                    st.session_state.data['power'] = cur_power
+                    st.session_state.data['power_unit'] = cur_power_unit
+                    st.session_state.data['capacity'] = cur_capacity
+                    st.session_state.data['capacity_unit'] = cur_capacity_unit
                     st.session_state.data['discharge'] = format_c_rate(cur_c_rate) if cur_c_rate else ""
                 except Exception:
                     st.session_state.data['discharge'] = ""
@@ -602,11 +696,22 @@ if st.session_state.show_pcs_section:
         
         return metrics
 
-    # 特定组合不推荐：EDGE 422/338kWh 仅在 AC；GRID5015 的 DC
+    # 特定组合不推荐：EDGE 422/338kWh 仅在 AC；GRID5015 的 DC；Discharge Rate > 0.5C
     no_recommend = (
         (current_product == 'EDGE' and current_solution == 'AC' and current_model in ['422kWh', '338kWh']) or
-        (current_product == 'GRID5015' and current_solution == 'DC')
+        (current_product == 'GRID5015' and current_solution == 'DC') or
+        (current_c_rate is not None and current_c_rate > 0.5)
     )
+    
+    # 确定不推荐的原因
+    no_recommend_reason = ""
+    if no_recommend:
+        if current_c_rate is not None and current_c_rate > 0.5:
+            no_recommend_reason = f"(Discharge rate cannot exceed 0.5C)"
+        elif current_product == 'GRID5015' and current_solution == 'DC':
+            no_recommend_reason = "(DC solution not available for GRID5015)"
+        elif current_product == 'EDGE' and current_solution == 'AC' and current_model in ['422kWh', '338kWh']:
+            no_recommend_reason = "(AC solution not available for this EDGE model)"
 
     if not current_product and not current_solution:
         pcs_options = []
@@ -637,7 +742,10 @@ if st.session_state.show_pcs_section:
 
     # 已选择时仅显示选中配置；空白或无数据时保持空白或提示
     if no_recommend:
-        st.info("No recommended solution")
+        if no_recommend_reason:
+            st.warning(f"⚠️ No recommended solution {no_recommend_reason}")
+        else:
+            st.info("No recommended solution")
     elif st.session_state.data.get('selected_pcs') and pcs_options:
         pcs_spacer_left, pcs_center, pcs_spacer_right = st.columns([2, 6, 2])
         with pcs_center:
@@ -801,7 +909,7 @@ if st.session_state.show_pcs_section:
 if st.session_state.show_results_section:
     st.markdown("<br><br>", unsafe_allow_html=True)
     
-    # 添加 Reload Options 按钮（替换原来的导航按钮）
+    # 添加 Reload Options 按钮
     nav_spacer, nav_reload = st.columns([8.5, 1.5])
     with nav_reload:
         if st.button("Reload Options ↻", key='reload_options_results', use_container_width=True):
@@ -1031,66 +1139,75 @@ if st.session_state.show_results_section:
     for year in range(0, 21):
         # 获取 SOH% 值（如果存在）
         soh_value = ""
+        soh_is_valid = False
         try:
             if 'soh_list' in locals() and soh_list and year < len(soh_list):
                 soh_val = soh_list[year]
                 if soh_val is not None:
                     soh_value = f"{soh_val * 100:.2f}%"
+                    soh_is_valid = True
         except:
             pass
         
-        # 获取 DC Nameplate 值
-        dc_nameplate_value = ""
-        try:
-            if 'dc_nameplate_list' in locals() and dc_nameplate_list and year < len(dc_nameplate_list):
-                dc_val = dc_nameplate_list[year]
-                if dc_val is not None:
-                    dc_nameplate_value = f"{dc_val:,.2f}"
-        except:
-            pass
-        
-        # 获取 DC Usable 值
-        dc_usable_value = ""
-        try:
-            if 'dc_usable_list' in locals() and dc_usable_list and year < len(dc_usable_list):
-                dc_val = dc_usable_list[year]
-                if dc_val is not None:
-                    dc_usable_value = f"{dc_val:,.2f}"
-        except:
-            pass
-        
-        # 获取 AC Usable 值
-        ac_usable_value = ""
-        try:
-            if 'ac_usable_list' in locals() and ac_usable_list and year < len(ac_usable_list):
-                ac_val = ac_usable_list[year]
-                if ac_val is not None:
-                    ac_usable_value = f"{ac_val:,.2f}"
-        except:
-            pass
-        
-        # 获取 solution 类型（AC 或 DC）
-        solution_type = st.session_state.data.get('edge_solution', '').strip().upper()
-        
-        # 计算 Δ (Delta)
-        delta_value = ""
-        try:
-            if min_required_value != '-' and min_required_value is not None:
-                min_val = float(min_required_value)
-                if solution_type == 'AC':
-                    # 用 AC Usable - Min. Required
-                    if 'ac_usable_list' in locals() and ac_usable_list and year < len(ac_usable_list):
-                        ac_val = ac_usable_list[year]
-                        if ac_val is not None:
-                            delta_value = f"{ac_val - min_val:,.2f}"
-                else:
-                    # 用 DC Usable - Min. Required
-                    if 'dc_usable_list' in locals() and dc_usable_list and year < len(dc_usable_list):
-                        dc_val = dc_usable_list[year]
-                        if dc_val is not None:
-                            delta_value = f"{dc_val - min_val:,.2f}"
-        except:
+        # 如果 SOH 无效，所有计算值都显示 "-"
+        if not soh_is_valid:
+            dc_nameplate_value = "-"
+            dc_usable_value = "-"
+            ac_usable_value = "-"
+            delta_value = "-"
+        else:
+            # 获取 DC Nameplate 值
+            dc_nameplate_value = ""
+            try:
+                if 'dc_nameplate_list' in locals() and dc_nameplate_list and year < len(dc_nameplate_list):
+                    dc_val = dc_nameplate_list[year]
+                    if dc_val is not None:
+                        dc_nameplate_value = f"{dc_val:,.2f}"
+            except:
+                pass
+            
+            # 获取 DC Usable 值
+            dc_usable_value = ""
+            try:
+                if 'dc_usable_list' in locals() and dc_usable_list and year < len(dc_usable_list):
+                    dc_val = dc_usable_list[year]
+                    if dc_val is not None:
+                        dc_usable_value = f"{dc_val:,.2f}"
+            except:
+                pass
+            
+            # 获取 AC Usable 值
+            ac_usable_value = ""
+            try:
+                if 'ac_usable_list' in locals() and ac_usable_list and year < len(ac_usable_list):
+                    ac_val = ac_usable_list[year]
+                    if ac_val is not None:
+                        ac_usable_value = f"{ac_val:,.2f}"
+            except:
+                pass
+            
+            # 获取 solution 类型（AC 或 DC）
+            solution_type = st.session_state.data.get('edge_solution', '').strip().upper()
+            
+            # 计算 Δ (Delta)
             delta_value = ""
+            try:
+                if min_required_value != '-' and min_required_value is not None:
+                    min_val = float(min_required_value)
+                    if solution_type == 'AC':
+                        # 用 AC Usable - Min. Required
+                        if 'ac_usable_list' in locals() and ac_usable_list and year < len(ac_usable_list):
+                            ac_val = ac_usable_list[year]
+                            if ac_val is not None:
+                                delta_value = f"{ac_val - min_val:,.2f}"
+                    else:
+                        # 用 DC Usable - Min. Required
+                        if 'dc_usable_list' in locals() and dc_usable_list and year < len(dc_usable_list):
+                            dc_val = dc_usable_list[year]
+                            if dc_val is not None:
+                                delta_value = f"{dc_val - min_val:,.2f}"
+            except:
+                delta_value = ""
         data.append({
             columns[0]: str(year),  # End of Year
             columns[1]: str(proposed_bess),  # Containers in Service
