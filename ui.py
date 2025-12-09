@@ -256,7 +256,12 @@ with col_left:
         st.markdown('<div class="group-title">Basic Info</div>', unsafe_allow_html=True)
         
         customer = st.text_input("Customer Name:", value=st.session_state.data['customer'], key='customer')
+        if customer != st.session_state.data.get('customer'):
+            st.session_state.data['customer'] = customer
+        
         project = st.text_input("Project Name:", value=st.session_state.data['project'], key='project')
+        if project != st.session_state.data.get('project'):
+            st.session_state.data['project'] = project
         
         # Use Case dropdown list
         usecase_options = [
@@ -311,11 +316,18 @@ with col_left:
             )
             # 使用自定义值作为最终的 usecase
             final_usecase = usecase_custom if usecase_custom else "Other"
+            # Auto-save custom usecase
+            if usecase_custom != st.session_state.data.get('usecase_custom'):
+                st.session_state.data['usecase_custom'] = usecase_custom
+                st.session_state.data['usecase'] = final_usecase
         else:
             final_usecase = usecase
             # 清除自定义值
             if 'usecase_custom' in st.session_state.data:
                 st.session_state.data['usecase_custom'] = ''
+            # Auto-save standard usecase
+            if final_usecase != st.session_state.data.get('usecase'):
+                st.session_state.data['usecase'] = final_usecase
         
         # Life Stage dropdown
         life_stage_options = ["", "BOL", "EOL"]
@@ -325,6 +337,9 @@ with col_left:
             index=life_stage_options.index(st.session_state.data['life_stage']) if st.session_state.data['life_stage'] in life_stage_options else 0,
             key='life_stage'
         )
+        # Auto-save to session state when changed
+        if life_stage != st.session_state.data.get('life_stage'):
+            st.session_state.data['life_stage'] = life_stage
         
         # Location with fetch button
         location_col1, location_col2 = st.columns([0.82, 0.18])
@@ -389,6 +404,11 @@ with col_right:
             st.markdown('<div style="height: 28px;"></div>', unsafe_allow_html=True)
             power_unit = st.selectbox("Unit", ["kW", "MW"], key='power_unit_select', label_visibility="collapsed")
         
+        # Auto-save power and unit
+        if power != st.session_state.data.get('power') or power_unit != st.session_state.data.get('power_unit'):
+            st.session_state.data['power'] = power if power and power > 0 else None
+            st.session_state.data['power_unit'] = power_unit
+        
         # Capacity with unit
         capacity_col1, capacity_col2 = st.columns([3, 1])
         with capacity_col1:
@@ -404,11 +424,21 @@ with col_right:
             st.markdown('<div style="height: 28px;"></div>', unsafe_allow_html=True)
             capacity_unit = st.selectbox("Unit", ["kWh", "MWh"], key='capacity_unit_select', label_visibility="collapsed")
         
+        # Auto-save capacity and unit
+        if capacity != st.session_state.data.get('capacity') or capacity_unit != st.session_state.data.get('capacity_unit'):
+            st.session_state.data['capacity'] = capacity if capacity and capacity > 0 else None
+            st.session_state.data['capacity_unit'] = capacity_unit
+        
         # Calculate and display C-rate
         power_kw = to_kw(power if power and power > 0 else None, power_unit)
         capacity_kwh = to_kwh(capacity if capacity and capacity > 0 else None, capacity_unit)
         c_rate = calculate_c_rate(power_kw, capacity_kwh)
         c_rate_display = format_c_rate(c_rate) if c_rate else ""
+        
+        # Auto-save calculated values
+        st.session_state.data['power_kw'] = power_kw
+        st.session_state.data['capacity_kwh'] = capacity_kwh
+        st.session_state.data['discharge'] = c_rate_display
         
         # 使用 markdown 显示 C-rate (模拟 text_input 样式)
         st.markdown('<p style="margin-bottom: 0.25rem; font-size: 14px; font-weight: 400;">Discharge Rate:</p>', unsafe_allow_html=True)
@@ -424,15 +454,8 @@ with col_right:
             key='cycle'
         )
         
-        # Auto-save changes to session state when on results page
-        if st.session_state.show_results_section:
-            st.session_state.data['power'] = power if power and power > 0 else None
-            st.session_state.data['power_unit'] = power_unit
-            st.session_state.data['capacity'] = capacity if capacity and capacity > 0 else None
-            st.session_state.data['capacity_unit'] = capacity_unit
-            st.session_state.data['power_kw'] = power_kw
-            st.session_state.data['capacity_kwh'] = capacity_kwh
-            st.session_state.data['discharge'] = c_rate_display
+        # Auto-save cycle
+        if cycle_num != st.session_state.data.get('cycle'):
             st.session_state.data['cycle'] = cycle_num
     
     # ===== Lifecycle =====
@@ -445,18 +468,26 @@ with col_right:
             key='delivery',
             placeholder="e.g. Q1 2049 / Jan 2049"
         )
+        if delivery != st.session_state.data.get('delivery'):
+            st.session_state.data['delivery'] = delivery
+            
         cod = st.text_input(
             "COD:", 
             value=st.session_state.data['cod'], 
             key='cod',
             placeholder="e.g. Q4 2077 / Dec 2077"
         )
+        if cod != st.session_state.data.get('cod'):
+            st.session_state.data['cod'] = cod
         augmentation = st.selectbox(
             "Augmentation & Overbuild:",
             ["", "N/A", "Augmentation", "Overbuild"],
             index=["", "N/A", "Augmentation", "Overbuild"].index(st.session_state.data['augmentation']) if st.session_state.data['augmentation'] in ["", "N/A", "Augmentation", "Overbuild"] else 0,
             key='augmentation'
         )
+        # Auto-save to session state when changed
+        if augmentation != st.session_state.data.get('augmentation'):
+            st.session_state.data['augmentation'] = augmentation
 
 # ==========================================
 # 👇 Next 按钮：移到页面最底部右下角
@@ -477,29 +508,7 @@ if not st.session_state.show_pcs_section:
         with col_footer_right:
             # use_container_width=True 让按钮填满这个小列，视觉上更整齐
             if st.button("Next ➔", key='next_btn', use_container_width=True):
-                # 保存数据
-                st.session_state.data.update({
-                    'customer': customer,
-                    'project': project,
-                    'usecase': final_usecase,
-                    'life_stage': life_stage,
-                    'location': location,
-                    'power': power if power and power > 0 else None,
-                    'power_unit': power_unit,
-                    'capacity': capacity if capacity and capacity > 0 else None,
-                    'capacity_unit': capacity_unit,
-                    'power_kw': power_kw,
-                    'capacity_kwh': capacity_kwh,
-                    'discharge': c_rate_display,
-                    'cycle': cycle_num,
-                    'product': product,
-                    'edge_model': edge_model,
-                    'edge_solution': edge_solution,
-                    'delivery': delivery,
-                    'cod': cod,
-                    'augmentation': augmentation
-                })
-                
+                # 所有数据已经实时自动保存，只需触发页面切换
                 st.session_state.show_pcs_section = True
                 st.rerun()
 
@@ -525,6 +534,9 @@ if st.session_state.show_pcs_section:
             index=["", "EDGE", "GRID5015"].index(st.session_state.data.get('product', '')) if st.session_state.data.get('product', '') in ["", "EDGE", "GRID5015"] else 0,
             key='product_inline'
         )
+        # Auto-save when changed
+        if product_inline != st.session_state.data.get('product'):
+            st.session_state.data['product'] = product_inline
     with edit_col2:
         if product_inline == "EDGE":
             model_inline = st.selectbox(
@@ -533,6 +545,9 @@ if st.session_state.show_pcs_section:
                 index=["", "760kWh", "676kWh", "591kWh", "507kWh", "422kWh", "338kWh"].index(st.session_state.data.get('edge_model','')) if st.session_state.data.get('edge_model','') in ["", "760kWh", "676kWh", "591kWh", "507kWh", "422kWh", "338kWh"] else 0,
                 key='model_inline'
             )
+            # Auto-save when changed
+            if model_inline != st.session_state.data.get('edge_model'):
+                st.session_state.data['edge_model'] = model_inline
         else:
             model_inline = ""
     with edit_col3:
@@ -542,6 +557,9 @@ if st.session_state.show_pcs_section:
             index=["", "DC", "AC"].index(st.session_state.data.get('edge_solution','')) if st.session_state.data.get('edge_solution','') in ["", "DC", "AC"] else 0,
             key='solution_inline'
         )
+        # Auto-save when changed
+        if solution_inline != st.session_state.data.get('edge_solution'):
+            st.session_state.data['edge_solution'] = solution_inline
 
     # 导航与重载（仅在未选择 PCS 时显示 Reload Options 按钮）
     if not st.session_state.data.get('selected_pcs'):
@@ -583,6 +601,8 @@ if st.session_state.show_pcs_section:
     
     # Compute proposed BESS count
     current_augmentation = st.session_state.data.get('augmentation', '')
+    current_life_stage = st.session_state.data.get('life_stage', 'BOL')
+    current_cycles = st.session_state.data.get('cycle', 365)
     proposed_bess = 0
     if current_product and current_capacity_kwh:
         try:
@@ -591,7 +611,10 @@ if st.session_state.show_pcs_section:
                 product=current_product,
                 model=current_model,
                 augmentation_mode=current_augmentation,
-                solution_type=current_solution, # 传递 solution_type
+                solution_type=current_solution,
+                life_stage=current_life_stage,
+                cycles_per_year=int(current_cycles) if current_cycles else 365,
+                discharge_rate=current_c_rate if current_c_rate else 0.5,
             )
         except Exception:
             proposed_bess = 0

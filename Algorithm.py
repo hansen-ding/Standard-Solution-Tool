@@ -326,14 +326,22 @@ def compute_proposed_bess_count(
     product: str,
     model: str | None,
     augmentation_mode: str,
-    solution_type: str = 'DC',  # 直接用solution_type判定AC/DC
+    solution_type: str = 'DC',
+    life_stage: str = 'BOL',
+    cycles_per_year: int = 365,
+    discharge_rate: float = 0.5,
     bess_specs_sheet: int | str = 0,
 ) -> int:
     """
     Compute proposed number of BESS containers.
-    新算法：根据 solution_type（AC/DC），用需求总量除以单柜 usable capacity，向上取整。
-    - DC: usable = 100% DOD Energy × DOD × discharge_eff × calendar_degradation
-    - AC: usable = 100% DOD Energy × DOD × discharge_eff × ac_conversion × calendar_degradation
+    
+    根据 life_stage 和 augmentation_mode 决定使用的衰减因子：
+    - BOL: 只使用 calendar_degradation
+    - EOL 或 Overbuild: 使用 deg_20 × calendar_degradation
+    
+    Formula:
+    - DC: usable = 100% DOD Energy × DOD × discharge_eff × degradation_factor
+    - AC: usable = 100% DOD Energy × DOD × discharge_eff × ac_conversion × degradation_factor
     """
     try:
         specs = get_bess_specs_for(product, model, sheet=bess_specs_sheet)
@@ -354,19 +362,54 @@ def compute_proposed_bess_count(
         if energy_kwh is None or energy_kwh <= 0:
             return 0
 
-        # ---------- 新增：根据 product 计算 calendar_degradation ----------
+        # 根据 product 获取 calendar_degradation
         p = (product or '').strip().upper()
         if p == 'EDGE':
             calendar_degradation = 0.9565
         elif p == 'GRID5015':
             calendar_degradation = 0.9808
         else:
-            calendar_degradation = 1.0  # 不认识的产品先不衰减
-        # ------------------------------------------------------------------
+            calendar_degradation = 1.0
+
+        # 判断是否需要考虑20年循环衰减
+        # 只有 Life Stage = EOL 或 Augmentation = Overbuild 时才使用 SOH[20]
+        ls = (life_stage or '').strip().upper()
+        aug = (augmentation_mode or '').strip().upper()
+        
+        # 调试信息
+        print(f"[DEBUG] life_stage input: '{life_stage}' -> normalized: '{ls}'")
+        print(f"[DEBUG] augmentation_mode input: '{augmentation_mode}' -> normalized: '{aug}'")
+        
+        use_eol_degradation = (ls == 'EOL') or (aug == 'OVERBUILD')
+        
+        # 确定使用哪个 SOH 值
+        if use_eol_degradation:
+            # EOL/Overbuild: 使用 SOH[20] = deg_20 × calendar_degradation
+            try:
+                deg_curve = get_degradation_curve(
+                    product=product,
+                    cycles_per_year=cycles_per_year,
+                    discharge_rate=discharge_rate,
+                    debug=False
+                )
+                deg_20 = deg_curve.get('deg_20')
+                print(f"[DEBUG] deg_20 from curve: {deg_20}")
+                if deg_20 is not None:
+                    soh_factor = float(deg_20) * calendar_degradation  # SOH[20]
+                    print(f"[DEBUG] Using EOL: soh_factor = {deg_20} × {calendar_degradation} = {soh_factor}")
+                else:
+                    soh_factor = calendar_degradation  # 回退到 SOH[0]
+                    print(f"[DEBUG] deg_20 is None, fallback to BOL: soh_factor = {soh_factor}")
+            except Exception as e:
+                soh_factor = calendar_degradation  # 回退到 SOH[0]
+                print(f"[DEBUG] Exception occurred: {e}, fallback to BOL: soh_factor = {soh_factor}")
+        else:
+            # BOL/N/A/Augmentation: 使用 SOH[0] = 1.0 × calendar_degradation
+            soh_factor = calendar_degradation
+            print(f"[DEBUG] Using BOL: soh_factor = {soh_factor}")
 
         # 默认参数
         dod = 0.95
-        discharge_rate = 0.5  # 可根据实际传参
         ac_conversion = 0.9732
 
         # 放电效率
@@ -377,7 +420,7 @@ def compute_proposed_bess_count(
         else:
             discharge_eff = 0.95
 
-        # 直接用solution_type判定AC/DC
+        # 根据 solution_type 计算单柜可用容量
         solution_mode = (solution_type or '').strip().upper()
         if solution_mode == 'AC':
             usable = (
@@ -385,14 +428,14 @@ def compute_proposed_bess_count(
                 * dod
                 * discharge_eff
                 * ac_conversion
-                * calendar_degradation   # ✅ AC情形也乘日历衰减
+                * soh_factor
             )
         else:
             usable = (
                 energy_kwh
                 * dod
                 * discharge_eff
-                * calendar_degradation   # ✅ DC情形乘日历衰减
+                * soh_factor
             )
 
         if usable <= 0:
