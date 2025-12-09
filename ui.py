@@ -205,6 +205,36 @@ st.markdown(f"""
         text-align: center !important;
         justify-content: center !important;
     }}
+    
+    /* Augmentation Plan 输入框紧凑样式 */
+    [data-testid="column"] .stNumberInput {{
+        margin-bottom: 0 !important;
+    }}
+    [data-testid="column"] .stNumberInput > div {{
+        padding: 0 !important;
+    }}
+    [data-testid="column"] .stNumberInput input {{
+        min-height: 32px !important;
+        height: 32px !important;
+        padding: 4px 8px !important;
+        font-size: 13px !important;
+        text-align: center !important;
+    }}
+    
+    /* Augmentation Plan text input 样式 (用于允许空值) */
+    [data-testid="column"] .stTextInput {{
+        margin-bottom: 0 !important;
+    }}
+    [data-testid="column"] .stTextInput > div {{
+        padding: 0 !important;
+    }}
+    [data-testid="column"] .stTextInput input {{
+        min-height: 32px !important;
+        height: 32px !important;
+        padding: 4px 8px !important;
+        font-size: 13px !important;
+        text-align: center !important;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1126,12 +1156,14 @@ if st.session_state.show_results_section:
     
     # 获取选中配置的 PCS 数量
     selected_pcs_count = None
+    selected_pcs_tag = None
     if st.session_state.data.get('selected_pcs') and pcs_options:
         selected_label = st.session_state.data['selected_pcs']
         idx = 0 if selected_label == 'Configuration A' else 1
         opt = pcs_options[idx] if len(pcs_options) > idx else None
         if opt:
             tag = infer_tag_from_image(opt.get('image', ''))
+            selected_pcs_tag = tag
             metrics = compute_metrics_for_config(tag)
             selected_pcs_count = metrics.get('pcs_count_str', '-')
     
@@ -1157,9 +1189,117 @@ if st.session_state.show_results_section:
     else:
         min_required_value = '-'
 
+    # 初始化 augmentation_plan（如果不存在）
+    if 'augmentation_plan' not in st.session_state.data:
+        st.session_state.data['augmentation_plan'] = [0] * 21
+    
+    # 判断是否启用 Augmentation 编辑模式
+    is_augmentation_mode = (st.session_state.data.get('augmentation', '').strip().upper() == 'AUGMENTATION')
+    
+    # 如果是 Augmentation 模式，显示编辑界面
+    if is_augmentation_mode:
+        st.markdown('<div class="group-title">Augmentation Plan</div>', unsafe_allow_html=True)
+        
+        # 使用 Streamlit columns 创建紧凑的表格样式布局
+        # 第一行：Year 标签（居中显示）
+        year_cols = st.columns([0.8] + [1]*21)
+        with year_cols[0]:
+            st.markdown('<p style="text-align:center; margin:0; padding:4px 0; font-size:13px; font-weight:600;">Year</p>', unsafe_allow_html=True)
+        for year in range(21):
+            with year_cols[year + 1]:
+                st.markdown(f'<p style="text-align:center; margin:0; padding:4px 0; font-size:13px; font-weight:600;">{year}</p>', unsafe_allow_html=True)
+        
+        # 第二行：Qty 输入框（紧凑排列）
+        qty_cols = st.columns([0.8] + [1]*21)
+        with qty_cols[0]:
+            st.markdown('<p style="text-align:center; margin:0; padding:8px 0 4px 0; font-size:13px; font-weight:600;">Qty</p>', unsafe_allow_html=True)
+        
+        for year in range(21):
+            with qty_cols[year + 1]:
+                current_val = st.session_state.data['augmentation_plan'][year]
+                # 使用 text_input 允许空值，然后转换为整数
+                input_str = st.text_input(
+                    f"y{year}",
+                    value=str(int(current_val)) if current_val else "",
+                    key=f'aug_year_{year}',
+                    label_visibility="collapsed",
+                    placeholder=None
+                )
+                # 转换并验证输入
+                try:
+                    new_val = int(input_str) if input_str.strip() else 0
+                    new_val = max(0, new_val)  # 确保非负
+                except (ValueError, AttributeError):
+                    new_val = 0
+                # 自动保存
+                if new_val != st.session_state.data['augmentation_plan'][year]:
+                    st.session_state.data['augmentation_plan'][year] = new_val
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # 重新计算 containers_list（BOL + 累计 Aug）
+        containers_list = []
+        cumulative_aug = 0
+        for year in range(21):
+            cumulative_aug += st.session_state.data['augmentation_plan'][year]
+            containers_list.append(proposed_bess + cumulative_aug)
+        
+        # 重新计算所有依赖的数据
+        dc_nameplate_list = compute_yearly_dc_nameplate(
+            product=input_product,
+            model=input_model,
+            containers_list=containers_list,
+            capacity_unit=input_capacity_unit
+        )
+        
+        dc_usable_list = compute_yearly_dc_usable(
+            product=input_product,
+            model=input_model,
+            containers_list=containers_list,
+            soh_list=soh_list,
+            capacity_unit=input_capacity_unit,
+            dod=0.95,
+            discharge_rate=input_discharge,
+            augmentation_plan=st.session_state.data['augmentation_plan']  # 传递 augmentation_plan
+        )
+        
+        ac_usable_list = compute_yearly_ac_usable(
+            product=input_product,
+            model=input_model,
+            containers_list=containers_list,
+            soh_list=soh_list,
+            capacity_unit=input_capacity_unit,
+            dod=0.95,
+            discharge_rate=input_discharge,
+            ac_conversion=0.9732,
+            augmentation_plan=st.session_state.data['augmentation_plan']  # 传递 augmentation_plan
+        )
+    else:
+        # 非 Augmentation 模式：使用固定的 proposed_bess
+        containers_list = [proposed_bess] * 21
+    
     # 创建表格数据（21行：0-20）
     data = []
     for year in range(0, 21):
+        # 获取当前年份的容器数
+        current_containers = containers_list[year] if year < len(containers_list) else proposed_bess
+        
+        # 动态计算当前年份的 PCS 数量（基于当前容器数）
+        year_pcs_count = "-"
+        if selected_pcs_tag and selected_pcs_tag not in ('760', '760+dc'):
+            try:
+                # 使用当前年份的容器数重新计算 PCS
+                pcs_str = compute_pcs_count(
+                    product=current_product,
+                    option_tag=selected_pcs_tag,
+                    proposed_bess=current_containers,  # 使用当前年份的容器数
+                    power_kw=current_power_kw,
+                    discharge_rate=(st.session_state.data.get('discharge') or current_c_rate),
+                )
+                year_pcs_count = pcs_str if pcs_str not in ('-', '') else "-"
+            except Exception:
+                year_pcs_count = "-"
+        
         # 获取 SOH% 值（如果存在）
         soh_value = ""
         soh_is_valid = False
@@ -1233,8 +1373,8 @@ if st.session_state.show_results_section:
                 delta_value = ""
         data.append({
             columns[0]: str(year),  # End of Year
-            columns[1]: str(proposed_bess),  # Containers in Service
-            columns[2]: selected_pcs_count if selected_pcs_count else "-",  # PCS in Service
+            columns[1]: str(int(current_containers)),  # Containers in Service (使用动态值)
+            columns[2]: year_pcs_count,  # PCS in Service (使用动态计算的值)
             columns[3]: soh_value,  # SOH (% of Original Capacity)
             columns[4]: dc_nameplate_value,  # DC Nameplate (unit)
             columns[5]: dc_usable_value,  # DC Usable (unit)

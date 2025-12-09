@@ -1004,27 +1004,16 @@ def compute_yearly_dc_usable(
     capacity_unit: str = 'kWh',
     dod: float = 0.95,
     discharge_rate: float = 0.5,
+    augmentation_plan: list = None,
 ) -> list:
     """
-    Compute yearly DC Usable for years 0-20.
+    Compute yearly DC Usable for years 0-20, considering augmentation.
     
-    Formula: DC_Usable[year] = 100% DOD Energy × Containers[year] × DOD × discharge_eff × SOH[year]
+    Formula: DC_Usable[year] = sum(各批次柜子的可用容量)
     
-    Parameters:
-    - product: 'EDGE' or 'GRID5015'
-    - model: Model variant (e.g., '760kWh')
-    - containers_list: List of 21 container counts (one per year, allows for augmentation)
-    - soh_list: List of 21 SOH values (as fractions, e.g., 0.9565)
-    - capacity_unit: Output unit ('kWh' or 'MWh')
-    - dod: Depth of Discharge, default 95% (0.95)
-    - discharge_rate: C-rate value (e.g., 0.5), used to determine discharge efficiency
-    
-    Discharge Efficiency:
-    - 0.5C → 0.95 (95%)
-    - Other → 0.965 (96.5%)
-    
-    Returns:
-    - list of 21 DC Usable values (one per year)
+    For augmented containers:
+    - BOL containers use soh_list[year] (aged)
+    - Augmented containers use soh_list[service_years] (where service_years = current_year - added_year)
     """
     try:
         # Get 100% DOD Energy from BESS.xlsx
@@ -1051,29 +1040,72 @@ def compute_yearly_dc_usable(
         else:
             discharge_eff = 0.95
         
+        # If no augmentation plan provided, use simple calculation
+        if augmentation_plan is None or not isinstance(augmentation_plan, list):
+            # Simple case: all containers age together
+            dc_usable_list = []
+            for year in range(21):
+                containers = containers_list[year] if year < len(containers_list) else containers_list[-1] if containers_list else 0
+                try:
+                    containers = int(containers)
+                except:
+                    containers = 0
+                
+                soh = soh_list[year] if year < len(soh_list) and soh_list[year] is not None else 1.0
+                
+                dc_usable = energy_kwh * containers * dod * discharge_eff * soh
+                
+                if capacity_unit == 'MWh':
+                    dc_usable = round(dc_usable / 1000.0, 2)
+                else:
+                    dc_usable = round(dc_usable, 2)
+                
+                dc_usable_list.append(dc_usable)
+            
+            return dc_usable_list
+        
+        # Complex case: track each batch of containers separately
+        # Build batches: [year_added, quantity]
+        batches = []
+        bol_qty = containers_list[0] if containers_list else 0
+        if bol_qty > 0:
+            batches.append({'year_added': 0, 'quantity': bol_qty})
+        
+        for year in range(21):
+            aug_qty = augmentation_plan[year] if year < len(augmentation_plan) else 0
+            if aug_qty > 0:
+                batches.append({'year_added': year, 'quantity': aug_qty})
+        
         # Calculate DC Usable for each year
         dc_usable_list = []
-        for year in range(21):
-            # Get container count for this year (supports augmentation)
-            containers = containers_list[year] if year < len(containers_list) else containers_list[-1] if containers_list else 0
-            try:
-                containers = int(containers)
-            except:
-                containers = 0
+        for current_year in range(21):
+            total_dc_usable = 0.0
             
-            # Get SOH for this year
-            soh = soh_list[year] if year < len(soh_list) and soh_list[year] is not None else 1.0
-            
-            # Formula: energy × containers × DOD × discharge_eff × SOH
-            dc_usable = energy_kwh * containers * dod * discharge_eff * soh
+            for batch in batches:
+                year_added = batch['year_added']
+                quantity = batch['quantity']
+                
+                # Skip batches not yet added
+                if year_added > current_year:
+                    continue
+                
+                # Calculate service years for this batch
+                service_years = current_year - year_added
+                
+                # Get SOH for this batch (based on service years)
+                batch_soh = soh_list[service_years] if service_years < len(soh_list) and soh_list[service_years] is not None else 1.0
+                
+                # Calculate this batch的贡献
+                batch_dc_usable = energy_kwh * quantity * dod * discharge_eff * batch_soh
+                total_dc_usable += batch_dc_usable
             
             # Convert to desired unit
             if capacity_unit == 'MWh':
-                dc_usable = round(dc_usable / 1000.0, 2)
+                total_dc_usable = round(total_dc_usable / 1000.0, 2)
             else:
-                dc_usable = round(dc_usable, 2)
+                total_dc_usable = round(total_dc_usable, 2)
             
-            dc_usable_list.append(dc_usable)
+            dc_usable_list.append(total_dc_usable)
         
         return dc_usable_list
     
@@ -1090,35 +1122,22 @@ def compute_yearly_ac_usable(
     dod: float = 0.95,
     discharge_rate: float = 0.5,
     ac_conversion: float = 0.9732,
+    augmentation_plan: list = None,
 ) -> list:
     """
-    Compute yearly AC Usable for years 0-20.
+    Compute yearly AC Usable for years 0-20, considering augmentation.
     
-    Formula: AC_Usable[year] = 100% DOD Energy × Containers[year] × DOD × discharge_eff × 0.9732 × SOH[year]
+    Formula: AC_Usable[year] = sum(各批次柜子的可用容量 × ac_conversion)
     
-    Parameters:
-    - product: 'EDGE' or 'GRID5015'
-    - model: Model variant (e.g., '760kWh')
-    - containers_list: List of 21 container counts (one per year, allows for augmentation)
-    - soh_list: List of 21 SOH values (as fractions, e.g., 0.9565)
-    - capacity_unit: Output unit ('kWh' or 'MWh')
-    - dod: Depth of Discharge, default 95% (0.95)
-    - discharge_rate: C-rate value (e.g., 0.5), used to determine discharge efficiency
-    - ac_conversion: AC conversion efficiency, default 97.32% (0.9732)
-    
-    Discharge Efficiency:
-    - 0.5C → 0.95 (95%)
-    - Other → 0.965 (96.5%)
-    
-    Returns:
-    - list of 21 AC Usable values (one per year)
+    For augmented containers:
+    - BOL containers use soh_list[year] (aged)
+    - Augmented containers use soh_list[service_years] (where service_years = current_year - added_year)
     """
     try:
         # Get 100% DOD Energy from BESS.xlsx
         specs = get_bess_specs_for(product, model)
         energy_kwh = None
         
-        # Try to find 100% DOD Energy
         for key in ('100% DOD Energy (kWh)', '100%DOD Energy (kWh)', '100% DOD Energy', 'Energy (kWh)'):
             if key in specs:
                 try:
@@ -1130,7 +1149,7 @@ def compute_yearly_ac_usable(
         if energy_kwh is None or energy_kwh <= 0:
             return [None] * 21
         
-        # Determine discharge efficiency based on C-rate
+        # Determine discharge efficiency
         if discharge_rate is not None and discharge_rate <= 0.25:
             discharge_eff = 0.965
         elif discharge_rate is not None and discharge_rate <= 0.5:
@@ -1138,29 +1157,67 @@ def compute_yearly_ac_usable(
         else:
             discharge_eff = 0.95
         
-        # Calculate AC Usable for each year
-        ac_usable_list = []
+        # If no augmentation plan, simple calculation
+        if augmentation_plan is None or not isinstance(augmentation_plan, list):
+            ac_usable_list = []
+            for year in range(21):
+                containers = containers_list[year] if year < len(containers_list) else containers_list[-1] if containers_list else 0
+                try:
+                    containers = int(containers)
+                except:
+                    containers = 0
+                
+                soh = soh_list[year] if year < len(soh_list) and soh_list[year] is not None else 1.0
+                ac_usable = energy_kwh * containers * dod * discharge_eff * ac_conversion * soh
+                
+                if capacity_unit == 'MWh':
+                    ac_usable = round(ac_usable / 1000.0, 2)
+                else:
+                    ac_usable = round(ac_usable, 2)
+                
+                ac_usable_list.append(ac_usable)
+            return ac_usable_list
+        
+        # Complex case: track batches separately
+        batches = []
+        bol_qty = containers_list[0] if containers_list else 0
+        if bol_qty > 0:
+            batches.append({'year_added': 0, 'quantity': bol_qty})
+        
         for year in range(21):
-            # Get container count for this year (supports augmentation)
-            containers = containers_list[year] if year < len(containers_list) else containers_list[-1] if containers_list else 0
-            try:
-                containers = int(containers)
-            except:
-                containers = 0
+            aug_qty = augmentation_plan[year] if year < len(augmentation_plan) else 0
+            if aug_qty > 0:
+                batches.append({'year_added': year, 'quantity': aug_qty})
+        
+        ac_usable_list = []
+        for current_year in range(21):
+            total_ac_usable = 0.0
             
-            # Get SOH for this year
-            soh = soh_list[year] if year < len(soh_list) and soh_list[year] is not None else 1.0
-            
-            # Formula: energy × containers × DOD × discharge_eff × ac_conversion × SOH
-            ac_usable = energy_kwh * containers * dod * discharge_eff * ac_conversion * soh
+            for batch in batches:
+                year_added = batch['year_added']
+                quantity = batch['quantity']
+                
+                # Skip batches not yet added
+                if year_added > current_year:
+                    continue
+                
+                # Calculate service years for this batch
+                service_years = current_year - year_added
+                
+                # Get SOH for this batch (based on service years)
+                batch_soh = soh_list[service_years] if service_years < len(soh_list) and soh_list[service_years] is not None else 1.0
+                
+                # Calculate this batch的贡献
+                batch_ac_usable = energy_kwh * quantity * dod * discharge_eff * ac_conversion * batch_soh
+                total_ac_usable += batch_ac_usable
             
             # Convert to desired unit
             if capacity_unit == 'MWh':
-                ac_usable = round(ac_usable / 1000.0, 2)
+                total_ac_usable = round(total_ac_usable / 1000.0, 2)
             else:
-                ac_usable = round(ac_usable, 2)
+                total_ac_usable = round(total_ac_usable, 2)
             
-            ac_usable_list.append(ac_usable)
+            ac_usable_list.append(total_ac_usable)
         
         return ac_usable_list
     
