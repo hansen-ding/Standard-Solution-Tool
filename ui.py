@@ -244,26 +244,24 @@ st.markdown(f"""
             display: none !important;
         }}
         
-        /* 确保主容器占满页面 */
+        /* 确保主容器正常布局 */
         .main .block-container {{
             max-width: 100%;
-            padding: 0;
-            page-break-inside: avoid;
+            padding: 1rem;
         }}
         
-        /* 强制显示所有内容（无论 session_state 状态如何） */
-        [data-testid="stVerticalBlock"],
-        [data-testid="stHorizontalBlock"],
-        div[style*="display: none"],
-        .element-container {{
-            display: block !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-            page-break-inside: avoid;
+        /* 允许自然分页 */
+        .main-title, .subtitle {{
+            page-break-after: avoid;
+        }}
+        
+        /* 每个主要section之间允许分页 */
+        #pcs-selection {{
+            page-break-before: always;
         }}
         
         /* 表格和图表在打印时保持完整 */
-        .deg-table, .custom-table, .stDataFrame {{
+        .deg-table, .custom-table {{
             page-break-inside: avoid;
         }}
         
@@ -278,13 +276,14 @@ st.markdown(f"""
             page-break-after: avoid;
         }}
         
-        /* 避免在不恰当的位置分页 */
-        h1, h2, h3, h4, h5, h6 {{
-            page-break-after: avoid;
-        }}
-        
         /* 图表容器 */
         .stpyplot {{
+            page-break-inside: avoid;
+        }}
+        
+        /* 容器边框在打印时保持 */
+        div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlock"] {{
+            border: 1px solid #ccc;
             page-break-inside: avoid;
         }}
     }}
@@ -322,27 +321,14 @@ if 'show_pcs_section' not in st.session_state:
 if 'show_results_section' not in st.session_state:
     st.session_state.show_results_section = False
 
-# 添加打印专用的 JavaScript 和样式
+# 添加打印专用的样式标记
 if st.session_state.data.get('ready_to_print'):
     st.markdown("""
-    <script>
-        // 确保所有隐藏的元素在打印时可见
-        window.addEventListener('beforeprint', function() {
-            document.querySelectorAll('[style*="display: none"]').forEach(el => {
-                el.style.display = 'block';
-                el.style.visibility = 'visible';
-                el.style.opacity = '1';
-            });
-        });
-    </script>
     <style>
-        @media print {
-            /* 打印时强制显示所有内容 */
-            * {
-                display: block !important;
-                visibility: visible !important;
-                opacity: 1 !important;
-            }
+        /* 打印准备完成标记 */
+        body::before {
+            content: '';
+            display: none;
         }
     </style>
     """, unsafe_allow_html=True)
