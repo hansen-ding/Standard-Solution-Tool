@@ -235,81 +235,6 @@ st.markdown(f"""
         font-size: 13px !important;
         text-align: center !important;
     }}
-    
-    /* 打印样式 - 确保所有内容在打印时可见 */
-    @media print {{
-        /* 隐藏 Streamlit 的工具栏和按钮 */
-        header, footer, .stButton, [data-testid="stToolbar"], 
-        [data-testid="stDecoration"], [data-testid="stStatusWidget"] {{
-            display: none !important;
-        }}
-        
-        /* 🔑 关键：移除所有高度限制，让滚动条消失 */
-        html, body {{
-            height: auto !important;
-            overflow: visible !important;
-        }}
-        
-        /* 移除 Streamlit 主容器的高度限制 */
-        .main, [data-testid="stAppViewContainer"], 
-        [data-testid="stApp"], section[tabindex="0"] {{
-            height: auto !important;
-            max-height: none !important;
-            overflow: visible !important;
-        }}
-        
-        /* 确保内容容器完全展开 */
-        .main .block-container {{
-            max-width: 100%;
-            padding: 1rem;
-            height: auto !important;
-            max-height: none !important;
-            overflow: visible !important;
-        }}
-        
-        /* 所有可滚动元素在打印时展开 */
-        * {{
-            overflow: visible !important;
-            max-height: none !important;
-        }}
-        
-        /* 允许自然分页 */
-        .main-title, .subtitle {{
-            page-break-after: avoid;
-        }}
-        
-        /* 每个主要section之间允许分页 */
-        #pcs-selection {{
-            page-break-before: always;
-        }}
-        
-        /* 表格和图表在打印时保持完整 */
-        .deg-table, .custom-table {{
-            page-break-inside: avoid;
-        }}
-        
-        /* 图片在打印时调整大小 */
-        img {{
-            max-width: 100%;
-            page-break-inside: avoid;
-        }}
-        
-        /* 分组标题在打印时保持在一起 */
-        .group-title {{
-            page-break-after: avoid;
-        }}
-        
-        /* 图表容器 */
-        .stpyplot {{
-            page-break-inside: avoid;
-        }}
-        
-        /* 容器边框在打印时保持 */
-        div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlock"] {{
-            border: 1px solid #ccc;
-            page-break-inside: avoid;
-        }}
-    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -343,18 +268,6 @@ if 'show_pcs_section' not in st.session_state:
 
 if 'show_results_section' not in st.session_state:
     st.session_state.show_results_section = False
-
-# 添加打印专用的样式标记
-if st.session_state.data.get('ready_to_print'):
-    st.markdown("""
-    <style>
-        /* 打印准备完成标记 */
-        body::before {
-            content: '';
-            display: none;
-        }
-    </style>
-    """, unsafe_allow_html=True)
 
 # 标题
 st.markdown('<div class="main-title">Project Overview</div>', unsafe_allow_html=True)
@@ -609,8 +522,8 @@ with col_right:
 # 👇 Next 按钮：移到页面最底部右下角
 # ==========================================
 
-# 只在未显示 PCS 部分时显示 Next 按钮（或处于打印准备状态时隐藏）
-if not st.session_state.show_pcs_section and not st.session_state.data.get('ready_to_print'):
+# 只在未显示 PCS 部分时显示 Next 按钮
+if not st.session_state.show_pcs_section:
     # 添加一点垂直间距，确保不拥挤
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -632,8 +545,7 @@ if not st.session_state.show_pcs_section and not st.session_state.data.get('read
 # PCS Selection 部分
 # ==========================================
 
-# 在打印准备模式下强制显示所有内容
-if st.session_state.show_pcs_section or st.session_state.data.get('ready_to_print'):
+if st.session_state.show_pcs_section:
     # 增加与第一页的垂直间距
     st.markdown("<div style='height: 48px;'></div>", unsafe_allow_html=True)
     # 顶部主题与副标题
@@ -1541,10 +1453,4 @@ if st.session_state.show_results_section:
     
     with export_col_right:
         if st.button("Export Configuration", key='export_config_btn', use_container_width=True):
-            # 强制设置打印标志，确保所有内容都渲染
-            st.session_state.data['ready_to_print'] = True
-            st.session_state.show_pcs_section = True
-            st.session_state.show_results_section = True
             st.success("✓ Press **Ctrl+P** (Windows) or **Cmd+P** (Mac) to print!")
-            # 触发页面重新渲染以确保所有内容可见
-            st.rerun()
