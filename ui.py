@@ -244,10 +244,33 @@ st.markdown(f"""
             display: none !important;
         }}
         
-        /* 确保主容器正常布局 */
+        /* 🔑 关键：移除所有高度限制，让滚动条消失 */
+        html, body {{
+            height: auto !important;
+            overflow: visible !important;
+        }}
+        
+        /* 移除 Streamlit 主容器的高度限制 */
+        .main, [data-testid="stAppViewContainer"], 
+        [data-testid="stApp"], section[tabindex="0"] {{
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+        }}
+        
+        /* 确保内容容器完全展开 */
         .main .block-container {{
             max-width: 100%;
             padding: 1rem;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+        }}
+        
+        /* 所有可滚动元素在打印时展开 */
+        * {{
+            overflow: visible !important;
+            max-height: none !important;
         }}
         
         /* 允许自然分页 */
