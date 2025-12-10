@@ -236,50 +236,155 @@ st.markdown(f"""
         text-align: center !important;
     }}
     
-    /* 打印样式：隐藏按钮，调整分页 */
+    
+    /* 打印样式：完全展开所有内容，取消滚动限制 */
     @media print {{
-        /* 隐藏所有按钮 */
-        .stButton {{
+        /* 最高优先级：强制所有元素可见且无滚动 */
+        * {{
+            overflow: visible !important;
+            max-height: none !important;
+            height: auto !important;
+        }}
+        
+        /* 隐藏所有按钮和交互元素 */
+        .stButton,
+        button,
+        [data-testid="stButton"] {{
             display: none !important;
         }}
         
-        /* 隐藏侧边栏和其他UI元素 */
+        /* 隐藏侧边栏和其他 UI 元素 */
         [data-testid="stSidebar"],
         [data-testid="stDecoration"],
+        [data-testid="stStatusWidget"],
+        [data-testid="stToolbar"],
         header,
         footer {{
             display: none !important;
         }}
         
-        /* 确保内容占满页面 */
-        .main .block-container {{
+        /* 根元素完全展开 */
+        html {{
+            height: auto !important;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }}
+        
+        body {{
+            height: auto !important;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }}
+        
+        /* Streamlit 应用容器完全展开 */
+        #root {{
+            height: auto !important;
+            min-height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+        }}
+        
+        /* 主容器完全展开 */
+        .main,
+        [data-testid="stApp"],
+        [data-testid="stAppViewContainer"],
+        [data-testid="stMain"],
+        section.main,
+        .css-1xy3kyp,
+        .css-18e3th9,
+        .css-z5fcl4 {{
+            height: auto !important;
+            min-height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            display: block !important;
+        }}
+        
+        /* 内容容器完全展开 */
+        .main .block-container,
+        [data-testid="block-container"],
+        .block-container {{
             max-width: 100% !important;
-            padding: 0.5rem !important;
+            width: 100% !important;
+            padding: 0.5rem 1rem !important;
+            height: auto !important;
+            min-height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+        }}
+        
+        /* 垂直块容器 */
+        [data-testid="stVerticalBlock"],
+        .css-1r6slb0 {{
+            height: auto !important;
+            overflow: visible !important;
         }}
         
         /* 每个主要部分后分页 */
         .page-break {{
             page-break-after: always !important;
             break-after: page !important;
+            height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            display: block !important;
         }}
         
         /* 避免表格和图表被截断 */
-        .custom-table, .deg-table {{
+        .custom-table,
+        .deg-table,
+        .stDataFrame,
+        table {{
             page-break-inside: avoid !important;
             break-inside: avoid !important;
         }}
         
+        /* 图表容器 */
+        .stPlotlyChart,
+        [data-testid="stImage"],
+        img {{
+            page-break-inside: avoid !important;
+            max-width: 100% !important;
+        }}
+        
+        /* 容器不要有边框在打印时 */
+        [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"] {{
+            border: 1px solid #ddd !important;
+        }}
+        
         /* 调整字体大小以适应打印 */
         body {{
-            font-size: 11pt !important;
+            font-size: 9pt !important;
         }}
         
         .main-title {{
-            font-size: 20pt !important;
+            font-size: 16pt !important;
+            page-break-after: avoid !important;
+            margin-top: 0 !important;
+        }}
+        
+        .subtitle {{
+            font-size: 11pt !important;
+            page-break-after: avoid !important;
         }}
         
         .group-title {{
-            font-size: 14pt !important;
+            font-size: 12pt !important;
+            page-break-after: avoid !important;
+        }}
+        
+        /* 确保输入框内容可见 */
+        input, select, textarea {{
+            border: 1px solid #ccc !important;
+            background: white !important;
+            -webkit-appearance: none !important;
+        }}
+        
+        /* 列布局 */
+        [data-testid="column"] {{
+            page-break-inside: avoid !important;
         }}
     }}
 </style>
