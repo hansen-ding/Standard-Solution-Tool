@@ -540,6 +540,10 @@ def compute_pcs_count(
         return '0'
     # GRID5015
     if p == 'GRID5015':
+        # Pure DC solution (5015.png) - no PCS
+        if tag == '5015':
+            return '-'
+        # AC solutions - calculate PCS
         try:
             if dr_val > 0.25 and dr_val <= 0.5:
                 return str(max(0, ceil((proposed_bess or 0) / 2)))

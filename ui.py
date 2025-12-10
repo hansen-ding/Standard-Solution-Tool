@@ -680,6 +680,8 @@ if st.session_state.show_pcs_section:
                 return '5015+cab1000'
             if '5015+4800' in name or '4800' in name:
                 return '5015+4800'
+            if '5015.png' in name or name.endswith('/5015.png'):
+                return '5015'
         except Exception:
             pass
         return ''
@@ -693,8 +695,8 @@ if st.session_state.show_pcs_section:
             'rated_ac_power_unit': system_rated_dc_power_unit,
         }
         
-        # PCS count (skip 760 and 760+DC)
-        if option_tag not in ('760', '760+dc'):
+        # PCS count (skip 760, 760+DC, and 5015 pure DC)
+        if option_tag not in ('760', '760+dc', '5015'):
             pcs_str = compute_pcs_count(
                 product=current_product,
                 option_tag=option_tag,
@@ -1256,7 +1258,7 @@ if st.session_state.show_results_section:
         
         # 动态计算当前年份的 PCS 数量（基于当前容器数）
         year_pcs_count = "-"
-        if selected_pcs_tag and selected_pcs_tag not in ('760', '760+dc'):
+        if selected_pcs_tag and selected_pcs_tag not in ('760', '760+dc', '5015'):
             try:
                 # 使用当前年份的容器数重新计算 PCS
                 pcs_str = compute_pcs_count(
@@ -1453,4 +1455,4 @@ if st.session_state.show_results_section:
     
     with export_col_right:
         if st.button("Export Configuration", key='export_config_btn', use_container_width=True):
-            st.success("To print this configuration, open the menu in the top-right corner and select 'Print'.")
+            st.success("✓ Press **Ctrl+P** (Windows) or **Cmd+P** (Mac) to print!")
