@@ -721,10 +721,9 @@ if st.session_state.show_pcs_section:
         
         return metrics
 
-    # 特定组合不推荐：EDGE 422/338kWh 仅在 AC；GRID5015 的 DC；Discharge Rate > 0.5C
+    # 特定组合不推荐：EDGE 422/338kWh 仅在 AC；Discharge Rate > 0.5C
     no_recommend = (
         (current_product == 'EDGE' and current_solution == 'AC' and current_model in ['422kWh', '338kWh']) or
-        (current_product == 'GRID5015' and current_solution == 'DC') or
         (current_c_rate is not None and current_c_rate > 0.5)
     )
     
@@ -733,8 +732,6 @@ if st.session_state.show_pcs_section:
     if no_recommend:
         if current_c_rate is not None and current_c_rate > 0.5:
             no_recommend_reason = f"(Discharge rate cannot exceed 0.5C)"
-        elif current_product == 'GRID5015' and current_solution == 'DC':
-            no_recommend_reason = "(DC solution not available for GRID5015)"
         elif current_product == 'EDGE' and current_solution == 'AC' and current_model in ['422kWh', '338kWh']:
             no_recommend_reason = "(AC solution not available for this EDGE model)"
 
