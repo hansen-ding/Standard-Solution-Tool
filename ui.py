@@ -236,20 +236,56 @@ st.markdown(f"""
         text-align: center !important;
     }}
     
-    /* 打印样式 - 显示所有页面 */
+    /* 打印样式 - 确保所有内容在打印时可见 */
     @media print {{
-        /* 隐藏所有按钮 */
-        .stButton {{
+        /* 隐藏 Streamlit 的工具栏和按钮 */
+        header, footer, .stButton, [data-testid="stToolbar"], 
+        [data-testid="stDecoration"], [data-testid="stStatusWidget"] {{
             display: none !important;
         }}
-        /* 显示所有内容 */
-        .page-section {{
-            display: block !important;
-            page-break-after: always;
+        
+        /* 确保主容器占满页面 */
+        .main .block-container {{
+            max-width: 100%;
+            padding: 0;
+            page-break-inside: avoid;
         }}
-        /* 最后一页不分页 */
-        .page-section:last-child {{
-            page-break-after: auto;
+        
+        /* 强制显示所有内容（无论 session_state 状态如何） */
+        [data-testid="stVerticalBlock"],
+        [data-testid="stHorizontalBlock"],
+        div[style*="display: none"],
+        .element-container {{
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            page-break-inside: avoid;
+        }}
+        
+        /* 表格和图表在打印时保持完整 */
+        .deg-table, .custom-table, .stDataFrame {{
+            page-break-inside: avoid;
+        }}
+        
+        /* 图片在打印时调整大小 */
+        img {{
+            max-width: 100%;
+            page-break-inside: avoid;
+        }}
+        
+        /* 分组标题在打印时保持在一起 */
+        .group-title {{
+            page-break-after: avoid;
+        }}
+        
+        /* 避免在不恰当的位置分页 */
+        h1, h2, h3, h4, h5, h6 {{
+            page-break-after: avoid;
+        }}
+        
+        /* 图表容器 */
+        .stpyplot {{
+            page-break-inside: avoid;
         }}
     }}
 </style>
@@ -286,10 +322,30 @@ if 'show_pcs_section' not in st.session_state:
 if 'show_results_section' not in st.session_state:
     st.session_state.show_results_section = False
 
-# ==========================================
-# 第一页：Project Overview
-# ==========================================
-st.markdown('<div class="page-section page-1">', unsafe_allow_html=True)
+# 添加打印专用的 JavaScript 和样式
+if st.session_state.data.get('ready_to_print'):
+    st.markdown("""
+    <script>
+        // 确保所有隐藏的元素在打印时可见
+        window.addEventListener('beforeprint', function() {
+            document.querySelectorAll('[style*="display: none"]').forEach(el => {
+                el.style.display = 'block';
+                el.style.visibility = 'visible';
+                el.style.opacity = '1';
+            });
+        });
+    </script>
+    <style>
+        @media print {
+            /* 打印时强制显示所有内容 */
+            * {
+                display: block !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+            }
+        }
+    </style>
+    """, unsafe_allow_html=True)
 
 # 标题
 st.markdown('<div class="main-title">Project Overview</div>', unsafe_allow_html=True)
@@ -540,14 +596,12 @@ with col_right:
         if augmentation != st.session_state.data.get('augmentation'):
             st.session_state.data['augmentation'] = augmentation
 
-st.markdown('</div>', unsafe_allow_html=True)  # 关闭 page-1
-
 # ==========================================
 # 👇 Next 按钮：移到页面最底部右下角
 # ==========================================
 
-# 只在未显示 PCS 部分时显示 Next 按钮
-if not st.session_state.show_pcs_section:
+# 只在未显示 PCS 部分时显示 Next 按钮（或处于打印准备状态时隐藏）
+if not st.session_state.show_pcs_section and not st.session_state.data.get('ready_to_print'):
     # 添加一点垂直间距，确保不拥挤
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -569,10 +623,8 @@ if not st.session_state.show_pcs_section:
 # PCS Selection 部分
 # ==========================================
 
-if st.session_state.show_pcs_section:
-    # 第二页：System Configuration
-    st.markdown('<div class="page-section page-2">', unsafe_allow_html=True)
-    
+# 在打印准备模式下强制显示所有内容
+if st.session_state.show_pcs_section or st.session_state.data.get('ready_to_print'):
     # 增加与第一页的垂直间距
     st.markdown("<div style='height: 48px;'></div>", unsafe_allow_html=True)
     # 顶部主题与副标题
@@ -791,7 +843,6 @@ if st.session_state.show_pcs_section:
             pass
 
     # 已选择时仅显示选中配置；空白或无数据时保持空白或提示
-    # 修改：即使在 Results 页也要显示选中的配置
     if no_recommend:
         if no_recommend_reason:
             st.warning(f"⚠️ No recommended solution {no_recommend_reason}")
@@ -846,7 +897,7 @@ if st.session_state.show_pcs_section:
                     else:
                         st.markdown("**System Rated AC Power:**")
                     st.markdown("<br>", unsafe_allow_html=True)
-    elif pcs_options and not st.session_state.show_results_section:
+    elif pcs_options:
         # 未选择时显示两个选项
         pcs_spacer_left, pcs_center, pcs_spacer_right = st.columns([1, 8, 1])
         with pcs_center:
@@ -952,17 +1003,12 @@ if st.session_state.show_pcs_section:
     else:
         # 完全空白状态：不渲染任何图片或错误
         st.markdown("<br>", unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)  # 关闭 page-2
 
 # ==========================================
 # Results & Analysis 部分
 # ==========================================
 
 if st.session_state.show_results_section:
-    # 第三页：Results & Analysis
-    st.markdown('<div class="page-section page-3">', unsafe_allow_html=True)
-    
     st.markdown("<br><br>", unsafe_allow_html=True)
     
     # 添加 Reload Options 按钮
@@ -1486,6 +1532,10 @@ if st.session_state.show_results_section:
     
     with export_col_right:
         if st.button("Export Configuration", key='export_config_btn', use_container_width=True):
+            # 强制设置打印标志，确保所有内容都渲染
+            st.session_state.data['ready_to_print'] = True
+            st.session_state.show_pcs_section = True
+            st.session_state.show_results_section = True
             st.success("✓ Press **Ctrl+P** (Windows) or **Cmd+P** (Mac) to print!")
-    
-    st.markdown('</div>', unsafe_allow_html=True)  # 关闭 page-3
+            # 触发页面重新渲染以确保所有内容可见
+            st.rerun()
