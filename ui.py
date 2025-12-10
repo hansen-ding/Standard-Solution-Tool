@@ -235,6 +235,53 @@ st.markdown(f"""
         font-size: 13px !important;
         text-align: center !important;
     }}
+    
+    /* 打印样式：隐藏按钮，调整分页 */
+    @media print {{
+        /* 隐藏所有按钮 */
+        .stButton {{
+            display: none !important;
+        }}
+        
+        /* 隐藏侧边栏和其他UI元素 */
+        [data-testid="stSidebar"],
+        [data-testid="stDecoration"],
+        header,
+        footer {{
+            display: none !important;
+        }}
+        
+        /* 确保内容占满页面 */
+        .main .block-container {{
+            max-width: 100% !important;
+            padding: 0.5rem !important;
+        }}
+        
+        /* 每个主要部分后分页 */
+        .page-break {{
+            page-break-after: always !important;
+            break-after: page !important;
+        }}
+        
+        /* 避免表格和图表被截断 */
+        .custom-table, .deg-table {{
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }}
+        
+        /* 调整字体大小以适应打印 */
+        body {{
+            font-size: 11pt !important;
+        }}
+        
+        .main-title {{
+            font-size: 20pt !important;
+        }}
+        
+        .group-title {{
+            font-size: 14pt !important;
+        }}
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -268,6 +315,10 @@ if 'show_pcs_section' not in st.session_state:
 
 if 'show_results_section' not in st.session_state:
     st.session_state.show_results_section = False
+
+# ==========================================
+# 第一页：Project Overview (始终显示或仅在打印时显示)
+# ==========================================
 
 # 标题
 st.markdown('<div class="main-title">Project Overview</div>', unsafe_allow_html=True)
@@ -518,6 +569,9 @@ with col_right:
         if augmentation != st.session_state.data.get('augmentation'):
             st.session_state.data['augmentation'] = augmentation
 
+# 添加分页符（仅在打印时生效）
+st.markdown('<div class="page-break"></div>', unsafe_allow_html=True)
+
 # ==========================================
 # 👇 Next 按钮：移到页面最底部右下角
 # ==========================================
@@ -764,6 +818,7 @@ if st.session_state.show_pcs_section:
             pass
 
     # 已选择时仅显示选中配置；空白或无数据时保持空白或提示
+    # 修改：即使在 Results 页也要显示选中的配置
     if no_recommend:
         if no_recommend_reason:
             st.warning(f"⚠️ No recommended solution {no_recommend_reason}")
@@ -818,7 +873,7 @@ if st.session_state.show_pcs_section:
                     else:
                         st.markdown("**System Rated AC Power:**")
                     st.markdown("<br>", unsafe_allow_html=True)
-    elif pcs_options:
+    elif pcs_options and not st.session_state.show_results_section:
         # 未选择时显示两个选项
         pcs_spacer_left, pcs_center, pcs_spacer_right = st.columns([1, 8, 1])
         with pcs_center:
@@ -924,6 +979,10 @@ if st.session_state.show_pcs_section:
     else:
         # 完全空白状态：不渲染任何图片或错误
         st.markdown("<br>", unsafe_allow_html=True)
+
+# 添加分页符（在 PCS Section 结束后）
+if st.session_state.show_pcs_section:
+    st.markdown('<div class="page-break"></div>', unsafe_allow_html=True)
 
 # ==========================================
 # Results & Analysis 部分
