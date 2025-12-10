@@ -341,8 +341,7 @@ with col_left:
             usecase_custom = st.text_input(
                 "Please specify:",
                 value=st.session_state.data.get('usecase_custom', ''),
-                key='usecase_custom_input',
-                placeholder="Enter custom use case"
+                key='usecase_custom_input'
             )
             # 使用自定义值作为最终的 usecase
             final_usecase = usecase_custom if usecase_custom else "Other"
@@ -591,36 +590,7 @@ if st.session_state.show_pcs_section:
         if solution_inline != st.session_state.data.get('edge_solution'):
             st.session_state.data['edge_solution'] = solution_inline
 
-    # 导航与重载（仅在未选择 PCS 时显示 Reload Options 按钮）
-    if not st.session_state.data.get('selected_pcs'):
-        nav_spacer, nav_reload = st.columns([8.5, 1.5])
-        with nav_reload:
-            if st.button("Load Options ↻", key='reload_options', use_container_width=True):
-                st.session_state.data['product'] = product_inline
-                st.session_state.data['edge_model'] = model_inline
-                st.session_state.data['edge_solution'] = solution_inline
-                try:
-                    cur_power = st.session_state.get('power_input', None)
-                    cur_power_unit = st.session_state.get('power_unit_select', 'kW')
-                    cur_capacity = st.session_state.get('capacity_input', None)
-                    cur_capacity_unit = st.session_state.get('capacity_unit_select', 'kWh')
-                    cur_power_kw = to_kw(cur_power if cur_power and cur_power > 0 else None, cur_power_unit)
-                    cur_capacity_kwh = to_kwh(cur_capacity if cur_capacity and cur_capacity > 0 else None, cur_capacity_unit)
-                    cur_c_rate = calculate_c_rate(cur_power_kw, cur_capacity_kwh)
-                    st.session_state.data['power_kw'] = cur_power_kw
-                    st.session_state.data['capacity_kwh'] = cur_capacity_kwh
-                    st.session_state.data['power'] = cur_power
-                    st.session_state.data['power_unit'] = cur_power_unit
-                    st.session_state.data['capacity'] = cur_capacity
-                    st.session_state.data['capacity_unit'] = cur_capacity_unit
-                    st.session_state.data['discharge'] = format_c_rate(cur_c_rate) if cur_c_rate else ""
-                except Exception:
-                    st.session_state.data['discharge'] = ""
-                st.session_state.data['selected_pcs'] = None
-                st.session_state.show_results_section = False
-                st.rerun()
-
-    # 准备选项数据（按当前输入生成)，空白状态处理
+    # 准备选项数据（按当前输入自动生成，无需手动加载）
     current_product = st.session_state.data.get('product')
     current_model = st.session_state.data.get('edge_model')
     current_solution = st.session_state.data.get('edge_solution')
@@ -1070,13 +1040,13 @@ if st.session_state.show_results_section:
             .deg-table {{
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 13px;
+                font-size: 12px;
                 margin-bottom: 20px;
                 table-layout: auto; /* Allow columns to adjust width automatically */
             }}
             .deg-table th, .deg-table td {{
                 border: 1px solid #ddd;
-                padding: 4px 6px;
+                padding: 4px 1px;
                 text-align: center !important;
             }}
             .deg-table th {{
@@ -1104,10 +1074,10 @@ if st.session_state.show_results_section:
             <table class="deg-table">
                 <thead>
                     <tr>
-                        <th>Cell (Ah)</th>
-                        <th>Cycles/Year</th>
-                        <th>Temperature (°C)</th>
-                        <th>Discharge rate</th>
+                        <th>Cell</th>
+                        <th>Cycles</th>
+                        <th>Temp(°C)</th>
+                        <th>C/P rate</th>
                         <th>DOD</th>
                         <th>0 yr</th>
                         <th>1 yr</th>
@@ -1483,6 +1453,4 @@ if st.session_state.show_results_section:
     
     with export_col_right:
         if st.button("Export Configuration", key='export_config_btn', use_container_width=True):
-            # TODO: 添加导出配置的逻辑
-            st.success("✓ Ready to export!")
-            st.info("Export functionality will be implemented here.")
+            st.success("✓ Press **Ctrl+P** (Windows) or **Cmd+P** (Mac) to print!")
