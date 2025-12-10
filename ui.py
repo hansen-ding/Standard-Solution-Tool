@@ -1452,5 +1452,5 @@ if st.session_state.show_results_section:
     export_col_left, export_col_right = st.columns([8.5, 1.5])
     
     with export_col_right:
-        if st.button("Please use 'Print' button on the upper right corner", key='export_config_btn', use_container_width=True):
-            st.success("Refresh the page to start over")
+        if st.button("Export", key='export_config_btn', use_container_width=True):
+            st.success("To print this configuration, open the menu in the top-right corner and select Print.")
