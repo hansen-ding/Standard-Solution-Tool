@@ -372,7 +372,11 @@ def compute_proposed_bess_count(
             calendar_degradation = 1.0
 
         # 判断是否需要考虑20年循环衰减
-        # 只有 Life Stage = EOL 或 Augmentation = Overbuild 时才使用 SOH[20]
+        # 规则：
+        # 1. EOL + Augmentation: 使用 BOL (SOH[0])，因为用户会手动补充容器
+        # 2. EOL (无 Augmentation): 使用 EOL (SOH[20])
+        # 3. Overbuild: 使用 EOL (SOH[20])
+        # 4. BOL / N/A: 使用 BOL (SOH[0])
         ls = (life_stage or '').strip().upper()
         aug = (augmentation_mode or '').strip().upper()
         
@@ -380,7 +384,13 @@ def compute_proposed_bess_count(
         print(f"[DEBUG] life_stage input: '{life_stage}' -> normalized: '{ls}'")
         print(f"[DEBUG] augmentation_mode input: '{augmentation_mode}' -> normalized: '{aug}'")
         
-        use_eol_degradation = (ls == 'EOL') or (aug == 'OVERBUILD')
+        # EOL + Augmentation: 按 BOL 处理
+        if ls == 'EOL' and aug == 'AUGMENTATION':
+            use_eol_degradation = False
+            print(f"[DEBUG] EOL + Augmentation detected: using BOL algorithm")
+        else:
+            # EOL (无 Augmentation) 或 Overbuild: 使用 EOL
+            use_eol_degradation = (ls == 'EOL') or (aug == 'OVERBUILD')
         
         # 确定使用哪个 SOH 值
         if use_eol_degradation:
