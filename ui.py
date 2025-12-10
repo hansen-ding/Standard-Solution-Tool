@@ -235,6 +235,23 @@ st.markdown(f"""
         font-size: 13px !important;
         text-align: center !important;
     }}
+    
+    /* 打印样式 - 显示所有页面 */
+    @media print {{
+        /* 隐藏所有按钮 */
+        .stButton {{
+            display: none !important;
+        }}
+        /* 显示所有内容 */
+        .page-section {{
+            display: block !important;
+            page-break-after: always;
+        }}
+        /* 最后一页不分页 */
+        .page-section:last-child {{
+            page-break-after: auto;
+        }}
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -268,6 +285,11 @@ if 'show_pcs_section' not in st.session_state:
 
 if 'show_results_section' not in st.session_state:
     st.session_state.show_results_section = False
+
+# ==========================================
+# 第一页：Project Overview
+# ==========================================
+st.markdown('<div class="page-section page-1">', unsafe_allow_html=True)
 
 # 标题
 st.markdown('<div class="main-title">Project Overview</div>', unsafe_allow_html=True)
@@ -518,6 +540,8 @@ with col_right:
         if augmentation != st.session_state.data.get('augmentation'):
             st.session_state.data['augmentation'] = augmentation
 
+st.markdown('</div>', unsafe_allow_html=True)  # 关闭 page-1
+
 # ==========================================
 # 👇 Next 按钮：移到页面最底部右下角
 # ==========================================
@@ -546,6 +570,9 @@ if not st.session_state.show_pcs_section:
 # ==========================================
 
 if st.session_state.show_pcs_section:
+    # 第二页：System Configuration
+    st.markdown('<div class="page-section page-2">', unsafe_allow_html=True)
+    
     # 增加与第一页的垂直间距
     st.markdown("<div style='height: 48px;'></div>", unsafe_allow_html=True)
     # 顶部主题与副标题
@@ -925,12 +952,17 @@ if st.session_state.show_pcs_section:
     else:
         # 完全空白状态：不渲染任何图片或错误
         st.markdown("<br>", unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)  # 关闭 page-2
 
 # ==========================================
 # Results & Analysis 部分
 # ==========================================
 
 if st.session_state.show_results_section:
+    # 第三页：Results & Analysis
+    st.markdown('<div class="page-section page-3">', unsafe_allow_html=True)
+    
     st.markdown("<br><br>", unsafe_allow_html=True)
     
     # 添加 Reload Options 按钮
@@ -1455,3 +1487,5 @@ if st.session_state.show_results_section:
     with export_col_right:
         if st.button("Export Configuration", key='export_config_btn', use_container_width=True):
             st.success("✓ Press **Ctrl+P** (Windows) or **Cmd+P** (Mac) to print!")
+    
+    st.markdown('</div>', unsafe_allow_html=True)  # 关闭 page-3
