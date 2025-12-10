@@ -223,34 +223,48 @@ def get_pcs_options(product: str, model: str = None, solution_type: str = None, 
 
     # GRID5015 rules
     if p == "grid5015":
-        dr = discharge_rate if discharge_rate is not None else None
-        if dr is not None and ((dr > 0.25 and dr <= 0.5) or (dr > 0.125 and dr <= 0.25)):
+        stype = (solution_type or "").strip().lower()
+        # DC solution (similar to EDGE 760 pure DC)
+        if stype == "dc":
             return [
                 make_option(
                     "config_a",
-                    "5015+5160.png",
-                    "Gotion GRID5015 + Sineng EH-5160-HA-MR-US-34.5 Skid",
-                    architecture="Centralized System",
-                    origin="BESS: China, PCS skid: China",
-                ),
-                make_option(
-                    "config_b",
-                    "5015+CAB1000.png",
-                    "Gotion GRID5015 + EPC Power CAB1000/AC-3L.2 Skid",
-                    architecture="Centralized System",
-                    origin="BESS: China, PCS skid: USA",
+                    "5015.png",
+                    "Gotion GRID5015 BESS",
+                    architecture="-",
+                    origin="China",
                 ),
             ]
-        if dr is not None and dr <= 0.125:
-            return [
-                make_option(
-                    "config_a",
-                    "5015+4800.png",
-                    "Gotion GRID5015 + EH-4800-HA-MR-US-34.5",
-                    architecture="Centralized System",
-                    origin="BESS: China, PCS skid: USA",
-                ),
-            ]
+        # AC solution (discharge rate dependent)
+        elif stype == "ac":
+            dr = discharge_rate if discharge_rate is not None else None
+            if dr is not None and ((dr > 0.25 and dr <= 0.5) or (dr > 0.125 and dr <= 0.25)):
+                return [
+                    make_option(
+                        "config_a",
+                        "5015+5160.png",
+                        "Gotion GRID5015 + Sineng EH-5160-HA-MR-US-34.5 Skid",
+                        architecture="Centralized System",
+                        origin="BESS: China, PCS skid: China",
+                    ),
+                    make_option(
+                        "config_b",
+                        "5015+CAB1000.png",
+                        "Gotion GRID5015 + EPC Power CAB1000/AC-3L.2 Skid",
+                        architecture="Centralized System",
+                        origin="BESS: China, PCS skid: USA",
+                    ),
+                ]
+            if dr is not None and dr <= 0.125:
+                return [
+                    make_option(
+                        "config_a",
+                        "5015+4800.png",
+                        "Gotion GRID5015 + EH-4800-HA-MR-US-34.5",
+                        architecture="Centralized System",
+                        origin="BESS: China, PCS skid: USA",
+                    ),
+                ]
         return []
 
     # Default: no options
