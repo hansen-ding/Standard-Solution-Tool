@@ -1,114 +1,157 @@
-# BESS Sizing Tool - Streamlit Web Application
+# BESS Sizing Tool
 
-## Installation
+A professional Battery Energy Storage System (BESS) sizing and configuration tool built with Streamlit for sales teams.
 
+## 📋 Features
+
+- **Project Overview Input**: Customer info, location, system requirements
+- **Temperature Data**: Auto-fetch max/min temperature by location
+- **System Design**: Power/capacity input with automatic C-rate calculation
+- **Product Selection**: EDGE and GRID5015 product lines
+- **PCS Configuration**: Multiple configuration options with visual comparison
+- **Performance Analysis**: 
+  - 20-year capacity degradation curves
+  - SOH (State of Health) tracking
+  - DC/AC usable capacity calculations
+  - Augmentation planning support
+- **Interactive Charts**: Capacity vs. time visualization
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Python 3.8 or higher
+- pip package manager
+
+### Installation
+
+1. Clone or download this repository:
 ```bash
-pip install -r requirements.txt
-# or
-pip install streamlit requests pandas numpy Pillow
+cd Standard-Solution-Tool
 ```
 
-## Run
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
 
+3. Run the application:
 ```bash
 streamlit run ui.py
 ```
 
-The app will open in your browser at: `http://localhost:8501`.
+4. Open your browser and navigate to:
+```
+http://localhost:8501
+```
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 Standard-Solution-Tool/
-├── ui.py              # Streamlit UI (three-step flow)
-├── algorithm.py       # Business logic & API calls
-├── images/            # Image assets
-│   ├── 760+DC.png
-│   ├── 760+AC.png
-│   └── ...
-├── requirements.txt   # Python dependencies
-└── README.md          # This file
+├── ui.py                      # Main Streamlit application
+├── algorithm.py               # Core calculation algorithms
+├── requirements.txt           # Python dependencies
+├── data/
+│   ├── BESS_Specs.xlsx       # BESS product specifications
+│   ├── degradation_curves/   # Battery degradation data
+│   └── PCS_images/           # PCS configuration images
+└── README.md
 ```
 
-## Features
+## 🔧 Configuration
 
-### Current Implementation
+### Custom Theme (Optional)
 
-#### Page 1: Project Overview
-- Basic info inputs (Customer, Project, Use Case, Life Stage)
-- Temperature fetch (City or Zipcode) using Open-Meteo API
-- System design inputs (Power/Capacity with kW/MW and kWh/MWh units)
-- Auto C-rate calculation and display
-- Lifecycle inputs (Delivery Date, COD, Augmentation)
-- Bottom-right Next button to proceed
-- Note: Product/Model/Solution selection is moved to Page 2
+Create `.streamlit/config.toml`:
 
-#### Page 2: System Configuration
-- Top title and subtitle
-- Compact selectors for Product, Model (only for EDGE), and Solution
-- Single button: “↻ Load Options”
-  - Updates Product/Model/Solution
-  - Recomputes C-rate from current inputs on Page 1 (no need to go back)
-  - Regenerates two PCS options when applicable
-- PCS options rendering (Configuration A/B) with images and text
-- Safe image rendering (no errors if file missing)
-- When selected, only the chosen configuration is shown
-- Special rules:
-  - EDGE with 422kWh or 338kWh → No recommended solution
-  - GRID5015 with DC solution → No recommended solution
+```toml
+[theme]
+primaryColor = "#EA5520"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F0F2F6"
+textColor = "#262730"
 
-#### Page 3: Results & Analysis
-- Capacity Analysis Table (9 columns, 20 rows)
-- Performance Chart (sample line chart)
-- Navigation buttons on this page:
-  - “← Edit Info” (back to Page 1)
-  - “↻ Change PCS” (back to Page 2)
-- Export Configuration (placeholder)
+[server]
+port = 8501
+maxUploadSize = 200
+```
 
-### Data Management
-- All data persisted in `st.session_state`
-- Cross-page state continuity
+## 🌐 Deployment Options
 
-### TODO
-- Export Configuration (image/PDF)
-- Auto-fill table values based on calculations
-- Dynamic chart data
+### Option 1: Internal Network Sharing (Simple)
 
-## Deployment
+```bash
+streamlit run ui.py --server.address=0.0.0.0 --server.port=8501
+```
 
-### Streamlit Cloud (free)
-1. Create a GitHub repository
-2. Push code to GitHub
-3. Visit https://streamlit.io/cloud
-4. Connect your repo and deploy
-5. Share the permanent URL
+Share the URL: `http://YOUR_IP:8501`
 
-## Tech Stack
-- Streamlit: three-step interactive UI
-- Requests: HTTP calls (weather API)
-- Open-Meteo API: free weather data
-- Pandas: data tables
-- NumPy: numeric utilities
-- Pillow: image support
+### Option 2: Company Server (Recommended)
 
-## UI Notes
-- Responsive layout for various screen sizes
-- Unified theme color: RGB(234, 85, 32) with hover effects
-- Compact components and spacing tuned for a dense layout
+```bash
+# Install as system service
+nohup streamlit run ui.py --server.port=8501 --server.address=0.0.0.0 &
+```
 
-## Changelog
+### Option 3: Cloud Deployment
 
-### v0.0.1 (2025-12-02)
-- Initial Streamlit UI completed (export pending)
-- Completed three-step workflow
-- Page 2: PCS options A/B with image-based rendering
-- Page 3: Results table + chart
-- Navigation system (Edit Info / Change PCS)
-- Image assets under `images/`
-- Export Configuration button (placeholder)
-- Responsive design and theme improvements
-- Session state persistence fixes
+Deploy to AWS, Azure, or use Streamlit Cloud (see documentation)
 
-### v0.0.0 (2025-11-XX)
-- Migration start: PyQt5 → Streamlit
-- Implemented basic Project Overview page
+## 🔒 Security
+
+For production deployment, consider adding:
+
+1. **Password Protection**: Add authentication in `ui.py`
+2. **HTTPS**: Use reverse proxy (nginx/Apache)
+3. **Access Control**: VPN or IP whitelist
+4. **Data Encryption**: For sensitive information
+
+## 📊 Usage Guide
+
+### Step 1: Project Overview
+- Enter customer and project details
+- Fetch location temperature data
+- Input power/capacity requirements
+
+### Step 2: System Configuration
+- Select product type (EDGE/GRID5015)
+- Choose model and solution (DC/AC)
+- Compare PCS configurations
+
+### Step 3: Results & Analysis
+- Review capacity degradation curves
+- Analyze 20-year performance
+- Plan augmentation strategy (if applicable)
+
+## 🛠️ Troubleshooting
+
+### Common Issues
+
+**Port already in use:**
+```bash
+streamlit run ui.py --server.port=8502
+```
+
+**Missing dependencies:**
+```bash
+pip install -r requirements.txt --upgrade
+```
+
+**Data file not found:**
+Ensure all Excel files are in the `data/` folder
+
+## 📝 Version History
+
+- **v1.0** (2024) - Initial release
+  - Project overview input
+  - PCS configuration selection
+  - Performance analysis and visualization
+
+## 👥 Support
+
+For internal support, contact your IT administrator or the development team.
+
+## 📄 License
+
+Internal company use only. Do not distribute without authorization.
