@@ -249,10 +249,10 @@ def get_pcs_options(product: str, model: str = None, solution_type: str = None, 
                     ),
                     make_option(
                         "config_b",
-                        "5015+CAB1000.png",
-                        "Gotion GRID5015 + EPC Power CAB1000/AC-3L.2 Skid",
+                        "5015+4200.png",
+                        "Gotion GRID5015 + Power Electronics FP4200 Skid",
                         architecture="Centralized System",
-                        origin="BESS: China, PCS skid: USA",
+                        origin="BESS: China, PCS skid: Spain",
                     ),
                 ]
             if dr is not None and dr <= 0.125:

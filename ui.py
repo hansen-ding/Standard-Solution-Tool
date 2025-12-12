@@ -1452,4 +1452,4 @@ if st.session_state.show_results_section:
     
     with export_col_right:
         if st.button("Export Configuration", key='export_config_btn', use_container_width=True):
-            st.success("✓ Press **Ctrl+P** (Windows) or **Cmd+P** (Mac) to print!")
+            st.success("Use the top-right menu and select Print to export the page")
