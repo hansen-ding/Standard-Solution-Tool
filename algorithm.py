@@ -543,12 +543,20 @@ def compute_pcs_count(
             return '-'
         if tag == '760+dc+epc':
             try:
-                return str(max(0, ceil(((power_kw or 0.0) / 1043.0))))
+                # 基于 proposed_bess 计算，使其支持 augmentation
+                # 每个 EPC Power CAB1000 提供 1043kW，每5个BESS需要的功率约为 proposed_bess/5 * 单柜功率
+                # 但为了与 power_kw 保持一致，使用 proposed_bess 来推算
+                if power_kw and power_kw > 0:
+                    return str(max(0, ceil(power_kw / 1043.0)))
+                else:
+                    # 如果没有 power_kw，基于 proposed_bess 估算（假设每5个BESS配1组PCS）
+                    return str(max(0, ceil(proposed_bess / 5.0)))
             except Exception:
                 return '0'
         if tag in ('760+dynapower', '760+ac'):
             try:
-                return str(int(max(0, proposed_bess) * 2))
+                # 确保基于 proposed_bess 动态计算
+                return str(max(0, int(proposed_bess) * 2))
             except Exception:
                 return '0'
         return '0'
