@@ -680,6 +680,8 @@ if st.session_state.show_pcs_section:
                 return '5015+cab1000'
             if '5015+4800' in name or '4800' in name:
                 return '5015+4800'
+            if '5015+4200' in name or '4200' in name:
+                return '5015+4200'
             if '5015.png' in name or name.endswith('/5015.png'):
                 return '5015'
         except Exception:
