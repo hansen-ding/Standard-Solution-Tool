@@ -79,7 +79,42 @@ maxUploadSize = 200
 
 ## 🌐 Deployment Options
 
-### Option 1: Internal Network Sharing (Simple)
+### Option 1: Docker (Recommended) 🐳
+
+Docker provides the easiest and most consistent deployment experience.
+
+**Using Docker Compose (Easiest):**
+```bash
+# Build and start the container
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop the container
+docker-compose down
+```
+
+**Using Docker directly:**
+```bash
+# Build the image
+docker build -t bess-sizing-tool .
+
+# Run the container
+docker run -d -p 8501:8501 --name bess-sizing-tool bess-sizing-tool
+
+# View logs
+docker logs -f bess-sizing-tool
+
+# Stop the container
+docker stop bess-sizing-tool
+```
+
+Access the application at: `http://localhost:8501`
+
+**For remote access:** Replace `localhost` with your server's IP address.
+
+### Option 2: Internal Network Sharing (Simple)
 
 ```bash
 streamlit run ui.py --server.address=0.0.0.0 --server.port=8501
@@ -87,16 +122,16 @@ streamlit run ui.py --server.address=0.0.0.0 --server.port=8501
 
 Share the URL: `http://YOUR_IP:8501`
 
-### Option 2: Company Server (Recommended)
+### Option 3: Company Server
 
 ```bash
 # Install as system service
 nohup streamlit run ui.py --server.port=8501 --server.address=0.0.0.0 &
 ```
 
-### Option 3: Cloud Deployment
+### Option 4: Cloud Deployment
 
-Deploy to AWS, Azure, or use Streamlit Cloud (see documentation)
+Deploy to AWS, Azure, GCP, or use Streamlit Cloud (see documentation)
 
 ## 🔒 Security
 
